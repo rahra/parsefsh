@@ -47,6 +47,7 @@ static double phi_iterate_merc(const ellipsoid_t *el, double N)
 
 
 // only used for debugging and reverse engineering
+#define REVENG
 #ifdef REVENG
 static void hexdump(void *buf, int len)
 {
@@ -159,6 +160,7 @@ int track_output_osm(FILE *out, track_t *trk, int cnt, const ellipsoid_t *el)
    {
       fprintf(out, "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n", id--, ts);
       fprintf(out, "      <tag k=\"name\" v=\"%s\"/>\n", trk[j].mta->name1);
+      fprintf(out, "      <tag k=\"fsh:type\" v=\"track\"/>\n");
       for (i = trk[j].first_id; i >= trk[j].last_id; i--)
       {
          fprintf(out, "      <nd ref=\"%d\"/>\n", i);
@@ -189,6 +191,35 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 
          fprintf(out, "%d, %d, %.8f, %.8f, %d, %s\n",
                trk[j].pt[i].lat, trk[j].pt[i].lon, lat, lon, trk[j].pt[i].depth, trk[j].mta->name1);
+      }
+   }
+   return 0;
+}
+
+
+int route_output(FILE *out, const route21_t *rte, int cnt)
+{
+   fsh_wpt_t *wpt;
+   time_t t;
+   int i, j;
+
+   for (j = 0; j < cnt; j++)
+   {
+      fprintf(out, "# route '%.*s', guid_cnt = %d\n", rte[j].hdr->name_len, rte[j].hdr->name, rte[j].hdr->guid_cnt);
+      for (i = 0; i < rte[j].hdr->guid_cnt; i++)
+         fprintf(out, "#   %s\n", guid_to_string(rte[j].guid[i]));
+
+      t = rte[j].hdr2->timestamp / 10000000000L;
+      fprintf(out, "# %f, %f, %s", (double) rte[j].hdr2->lat / 1E7, (double) rte[j].hdr2->lon / 1E7, ctime(&t));
+      hexdump(rte[j].hdr2->d, sizeof(rte[j].hdr2->d));
+      fprintf(out, "# wpt_cnt %d\n", rte[j].hdr3->wpt_cnt);
+      fprintf(out, "# guid_cnt %d\n", rte[j].hdr->guid_cnt);
+
+      for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
+      {
+         fprintf(out, "# %s, %f, %f, %.*s\n", guid_to_string(wpt->guid),
+               wpt->lat / 1E7, wpt->lon / 1E7, wpt->name_len, wpt->name);
+         wpt = (fsh_wpt_t*) ((char*) wpt + wpt->name_len + sizeof(*wpt));
       }
    }
    return 0;
@@ -271,6 +302,58 @@ int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
 }
 
 
+static int count_pt(int32_t lat, int32_t lon, void *pt)
+{
+   int i;
+
+   for (i = 0; ((fsh_wpt_t*) (pt + 4))->lat != lat && ((fsh_wpt_t*) (pt + 4))->lon != lon; i++, pt += sizeof(struct fsh_pt))
+   {
+//      printf("%d: ", i);
+      hexdump(pt, sizeof(struct fsh_pt));
+   }
+/*   printf("%d+ ", i);
+   hexdump(pt, sizeof(struct fsh_pt));*/
+   return i;
+}
+
+
+int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
+{
+   int rte_cnt = 0;
+
+   for (; blk->hdr.type != 0xffff; blk++)
+   {
+      fprintf(stderr, "# decoding 0x%02x\n", blk->hdr.type);
+      switch (blk->hdr.type)
+      {
+         case 0x21:
+            fprintf(stderr, "# route21\n");
+            if ((*rte = realloc(*rte, sizeof(**rte) * (rte_cnt + 1))) == NULL)
+               perror("realloc"), exit(EXIT_FAILURE);
+
+            (*rte)[rte_cnt].bhdr = (fsh_block_header_t*) &blk->hdr;
+            (*rte)[rte_cnt].hdr = blk->data;
+            (*rte)[rte_cnt].guid = (int64_t*) ((char*) ((*rte)[rte_cnt].hdr + 1) + (*rte)[rte_cnt].hdr->name_len);
+            (*rte)[rte_cnt].hdr2 = (struct fsh_hdr2*) ((*rte)[rte_cnt].guid + (*rte)[rte_cnt].hdr->guid_cnt);
+            (*rte)[rte_cnt].pt = (struct fsh_pt*) ((*rte)[rte_cnt].hdr2 + 1);
+//            (*rte)[rte_cnt].pt_cnt = count_pt((*rte)[rte_cnt].hdr2->lat, (*rte)[rte_cnt].hdr2->lon, (*rte)[rte_cnt].pt);
+            (*rte)[rte_cnt].hdr3 = (struct fsh_hdr3*) ((*rte)[rte_cnt].pt + (*rte)[rte_cnt].hdr->guid_cnt);
+            (*rte)[rte_cnt].wpt = (fsh_wpt_t*) ((*rte)[rte_cnt].hdr3 + 1);
+
+            //fprintf(stderr, "rte_cnt = %d, pt_cnt = %d\n", rte_cnt, (*rte)[rte_cnt].pt_cnt);
+
+            rte_cnt++;
+            break;
+
+
+         default:
+            fprintf(stderr, "# block type 0x%02x not implemented yet\n", blk->hdr.type);
+      }
+   }
+   return rte_cnt;
+}
+
+
 static void usage(const char *s)
 {
    printf(
@@ -285,9 +368,10 @@ static void usage(const char *s)
 int main(int argc, char **argv)
 {
    track_t *trk = NULL;
+   route21_t *rte = NULL;
    fsh_block_t *blk;
    ellipsoid_t el = WGS84;
-   int fd = 0, trk_cnt = 0, osm_out = 0;
+   int fd = 0, trk_cnt = 0, osm_out = 0, rte_cnt = 0;
    int c;
 
    while ((c = getopt(argc, argv, "ho")) != -1)
@@ -306,6 +390,12 @@ int main(int argc, char **argv)
    read_rayflob(fd);
 
    blk = fsh_block_read(fd);
+
+   rte_cnt = fsh_route_decode(blk, &rte);
+
+   route_output(stdout, rte, rte_cnt);
+
+#if 0
    trk_cnt = fsh_track_decode(blk, &trk);
 
    init_ellipsoid(&el);
@@ -314,6 +404,7 @@ int main(int argc, char **argv)
       track_output_osm(stdout, trk, trk_cnt, &el);
    else
       track_output(stdout, trk, trk_cnt, &el);
+#endif
 
    return 0;
 }

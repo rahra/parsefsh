@@ -20,6 +20,8 @@
 #define WGS84 {6378137, 6356752.3142, 0}
 
 
+/*** file structures of the ARCHIVE.FSH ***/
+
 // total length 14 bytes
 typedef struct fsh_track_point
 {
@@ -79,14 +81,80 @@ typedef struct fsh_block
 } __attribute__ ((packed)) fsh_block_t; 
 
 // route type 0x21
-typedef struct fsh_route
+typedef struct fsh_route21_header
 {
    int16_t a;        //!< unknown, always 0
    int16_t name_len; //!< length of name of route
    int16_t guid_cnt;
    uint16_t b;       //!< unknown
+   char name[];      //!< unterminated name string of length name_len
+} __attribute__ ((packed)) fsh_route21_header_t;
 
-} __attribute__ ((packed)) fsh_route_t;
+// route type 0x22
+typedef struct fsh_route22_header
+{
+   int16_t name_len; //!< length of name of route
+   int16_t guid_cnt;
+
+} __attribute__ ((packed)) fsh_route22_header_t;
+
+/*// header before waypoints in route after guid list
+typedef struct fsh_wpt_header
+{
+   uint64_t time1;
+   uint64_t time2;
+   uint32_t weird;      //!< according to Emmons
+   char a[26];
+
+} __attribute__ ((packed)) fsh_wpt_header_t;
+*/
+
+// waypoint length 56 bytes (without var. length name)
+typedef struct fsh_wpt
+{
+   int64_t guid;
+   int32_t lat, lon;
+   uint64_t timestamp;
+   char d[12];          //!< 12x \0
+   char sym;            //!< probably symbol
+   int16_t e;          //!< unknown, always -1
+   int32_t f;          //!< unknown, always -1
+   int32_t g;          //!< unknown
+   uint16_t h;         //!< unknown
+   char i;             //!< unknown, always 0
+   int16_t name_len;    //!< length of name array
+   int32_t j;           //!< unknown, always 0
+   char name[];         //!< unterminated wpt name
+} __attribute__ ((packed)) fsh_wpt_t;
+
+
+struct fsh_hdr2
+{
+   int32_t lat, lon;
+   int64_t timestamp;
+   int16_t a;
+   int16_t b;           //!< 0 or 1
+   int16_t c;
+   char d[24];
+} __attribute__ ((packed));
+
+struct fsh_pt
+{
+   int16_t a;
+   int16_t b;
+   int16_t c;        //!< always 0
+   int16_t d;        //!< in the first element same value like b
+   int16_t e;        //!< mostly 1 or 2
+} __attribute__ ((packed));
+
+struct fsh_hdr3
+{
+   int16_t wpt_cnt;  //!< number of waypoints
+   int16_t a;        //!< always 0
+} __attribute__ ((packed));
+
+
+/*** memory structures used by parsefsh ***/
 
 // memory structure for keeping a track
 typedef struct track
@@ -95,8 +163,25 @@ typedef struct track
    fsh_track_header_t *hdr;
    fsh_track_meta_t *mta;
    fsh_track_point_t *pt;
-   int first_id, last_id;
+
+   int first_id, last_id;     //!< IDs, used for OSM output
 } track_t;
+
+// mem struct for keeping a route
+typedef struct route21
+{
+   fsh_block_header_t *bhdr;
+   fsh_route21_header_t *hdr;
+   int64_t *guid;
+   //fsh_wpt_header_t *whdr;
+   struct fsh_hdr2 *hdr2;
+//   int pt_cnt;
+   struct fsh_pt *pt;
+   struct fsh_hdr3 *hdr3;
+   fsh_wpt_t *wpt;         //!< pointer to the first waypoint. Note, it does
+                           //!< not increase linearly because fsh_wpt_t
+                           //!< contains a variable length array if name_len length.
+} route21_t;
 
 // structure to keep ellipsoid data
 typedef struct ellipsoid

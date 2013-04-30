@@ -3,10 +3,12 @@
 
 #include <stdint.h>
 
+#define RL90_STR "RL90 FLASH FILE"
+#define RFLOB_STR "RAYFLOB1"
+
 
 // maximum iterations to prevent from endless loops
 #define MAX_IT 32
-
 // iteration accuracy for reverse Mercator,
 // approx 10cm in radians: 10cm / 100 / 1852 / 60 / 180 * M_PI
 #define IT_ACCURACY 1.5E-8
@@ -21,6 +23,20 @@
 
 
 /*** file structures of the ARCHIVE.FSH ***/
+
+typedef struct fsh_file_header
+{
+   char rl90[16];    //!< constant terminated string "RL90 FLASH FILE"
+   int32_t a;        //!< 1 or 8
+   int16_t b;        //!< always 0
+   int16_t c;        //!< always 1
+   int16_t d;        //!< always 1
+   int16_t e;        //!< always 1
+   char rflob[8];    //!< constant unterminated string "RAYFLOB1"
+   int16_t f;        //!< always 1
+   int16_t g;        //!< always 1
+   int16_t h;        //!< 0xfffc or 0xfff0
+} __attribute__ ((packed)) fsh_file_header_t;
 
 // total length 14 bytes
 typedef struct fsh_track_point

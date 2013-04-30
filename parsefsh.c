@@ -10,13 +10,6 @@
 #include "parsefsh.h"
 
 
-const int RL90_HEADER_LEN = 28;
-const int RFLOB_HEADER_LEN = 14;
-const char *RL90  = "RL90 FLASH FILE";
-const char *RFLOB = "RAYFLOB1";
-
-static const char hex_[] = "0123456789abcdef";
-
 
 static void init_ellipsoid(ellipsoid_t *el)
 {
@@ -49,6 +42,8 @@ static double phi_iterate_merc(const ellipsoid_t *el, double N)
 // only used for debugging and reverse engineering
 #define REVENG
 #ifdef REVENG
+static const char hex_[] = "0123456789abcdef";
+
 static void hexdump(void *buf, int len)
 {
    int i;
@@ -74,48 +69,6 @@ static void raycoord_norm(int32_t lat0, int32_t lon0, double *lat, double *lon)
 {
    *lat = lat0 / FSH_LAT_SCALE;
    *lon = lon0 / FSH_LON_SCALE * 180.0;
-}
-
-
-int read_rl90(int fd)
-{
-   char buf[RL90_HEADER_LEN];
-
-   if (read(fd, buf, sizeof(buf)) == -1)
-      perror("read"), exit(EXIT_FAILURE);
-
-   if (memcmp(buf, RL90, strlen(RL90)))
-      fprintf(stderr, "no RL90 header\n"),
-         exit(EXIT_FAILURE);
-
-   fprintf(stderr, "# rl90 byte: %02x\n", buf[16] & 0xff);
-
-   return 0;
-}
-
-
-int read_rayflob(int fd)
-{
-   char buf[RFLOB_HEADER_LEN];
-
-   if (read(fd, buf, sizeof(buf)) == -1)
-      perror("read"), exit(EXIT_FAILURE);
-
-   if (memcmp(buf, RFLOB, strlen(RFLOB)))
-      fprintf(stderr, "no RFLOB header\n"),
-         exit(EXIT_FAILURE);
-
-   return 0;
-}
-
-
-int read_blockheader(int fd, fsh_block_header_t *hdr)
-{
-   if (read(fd, hdr, sizeof(*hdr)) == -1)
-      perror("read"), exit(EXIT_FAILURE);
-
-   fprintf(stderr, "# block type = 0x%02x, len = %d, guid %s\n", hdr->type, hdr->len, guid_to_string(hdr->guid));
-   return hdr->len;
 }
 
 
@@ -217,7 +170,7 @@ int route_output(FILE *out, const route21_t *rte, int cnt)
 
       for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
       {
-         fprintf(out, "# %s, %f, %f, %.*s\n", guid_to_string(wpt->guid),
+         fprintf(out, "# %s, %.7f, %.7f, %.*s\n", guid_to_string(wpt->guid),
                wpt->lat / 1E7, wpt->lon / 1E7, wpt->name_len, wpt->name);
          wpt = (fsh_wpt_t*) ((char*) wpt + wpt->name_len + sizeof(*wpt));
       }
@@ -226,31 +179,71 @@ int route_output(FILE *out, const route21_t *rte, int cnt)
 }
 
 
+int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
+{
+   int len;
+
+   if ((len = read(fd, fhdr, sizeof(*fhdr))) == -1)
+      perror("read"), exit(EXIT_FAILURE);
+
+   if (len < sizeof(*fhdr))
+      fprintf(stderr, "# file header truncated, read %d of %ld\n", len, sizeof(*fhdr)),
+         exit(EXIT_FAILURE);
+
+   if (memcmp(fhdr->rl90, RL90_STR, strlen(RL90_STR)) ||
+         memcmp(fhdr->rflob, RFLOB_STR, strlen(RFLOB_STR)))
+      fprintf(stderr, "# file seems not to be a valid ARCHIVE.FSH!\n"),
+         exit(EXIT_FAILURE);
+
+   return 0;
+}
+
+
 fsh_block_t *fsh_block_read(int fd)
 {
-   int blk_cnt, running;
+   int blk_cnt, len, pos, rlen;
    fsh_block_t *blk = NULL;
 
-   for (running = 1, blk_cnt = 0; running; blk_cnt++)
+   for (blk_cnt = 0, pos = 0x2a; ; blk_cnt++)   // 0x2a is the start offset after the file header
    {
       if ((blk = realloc(blk, sizeof(*blk) * (blk_cnt + 1))) == NULL)
          perror("realloc"), exit(EXIT_FAILURE);
       blk[blk_cnt].data = NULL;
-      read_blockheader(fd, &blk[blk_cnt].hdr);
-      fprintf(stderr, "# block type 0x%02x\n", blk[blk_cnt].hdr.type);
+
+      if ((len = read(fd, &blk[blk_cnt].hdr, sizeof(blk[blk_cnt].hdr))) == -1)
+         perror("read"), exit(EXIT_FAILURE);
+
+      fprintf(stderr, "# offset = $%08x, block type = 0x%02x, len = %d, guid %s\n",
+            pos, blk[blk_cnt].hdr.type, blk[blk_cnt].hdr.len, guid_to_string(blk[blk_cnt].hdr.guid));
+      pos += len;
+
+      if (len < sizeof(blk[blk_cnt].hdr))
+      {
+         fprintf(stderr, "# header truncated, read %d of %ld\n", len, sizeof(blk[blk_cnt].hdr));
+         blk[blk_cnt].hdr.type = 0xffff;
+      }
 
       if (blk[blk_cnt].hdr.type == 0xffff)
       {
             fprintf(stderr, "# end\n");
-            running = 0;
-            continue;
+            break;
       }
 
-      if ((blk[blk_cnt].data = malloc(blk[blk_cnt].hdr.len)) == NULL)
+      rlen = blk[blk_cnt].hdr.len + (blk[blk_cnt].hdr.len & 1);  // pad odd blocks by 1 byte
+      if ((blk[blk_cnt].data = malloc(rlen)) == NULL)
          perror("malloc"), exit(EXIT_FAILURE);
 
-      if (read(fd, blk[blk_cnt].data, blk[blk_cnt].hdr.len) == -1)
+      if ((len = read(fd, blk[blk_cnt].data, rlen)) == -1)
          perror("read"), exit(EXIT_FAILURE);
+      pos += len;
+
+      if (len < rlen)
+      {
+         fprintf(stderr, "# block data truncated, read %d of %d\n", len, rlen);
+         // clear unfilled partition of block
+         memset(blk[blk_cnt].data + len, 0, rlen - len);
+         break;
+      }
    }
    return blk;
 }
@@ -260,6 +253,7 @@ int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
 {
    int i, trk_cnt = 0;
 
+   fprintf(stderr, "# decoding tracks");
    for (; blk->hdr.type != 0xffff; blk++)
    {
       fprintf(stderr, "# decoding 0x%02x\n", blk->hdr.type);
@@ -292,9 +286,6 @@ int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
                fprintf(stderr, "# *** track not found for track meta data!\n");
 
             break;
-
-         default:
-            fprintf(stderr, "# block type 0x%02x not implemented yet\n", blk->hdr.type);
       }
    }
 
@@ -302,25 +293,11 @@ int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
 }
 
 
-static int count_pt(int32_t lat, int32_t lon, void *pt)
-{
-   int i;
-
-   for (i = 0; ((fsh_wpt_t*) (pt + 4))->lat != lat && ((fsh_wpt_t*) (pt + 4))->lon != lon; i++, pt += sizeof(struct fsh_pt))
-   {
-//      printf("%d: ", i);
-      hexdump(pt, sizeof(struct fsh_pt));
-   }
-/*   printf("%d+ ", i);
-   hexdump(pt, sizeof(struct fsh_pt));*/
-   return i;
-}
-
-
 int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
 {
    int rte_cnt = 0;
 
+   fprintf(stderr, "# decoding routes");
    for (; blk->hdr.type != 0xffff; blk++)
    {
       fprintf(stderr, "# decoding 0x%02x\n", blk->hdr.type);
@@ -336,21 +313,21 @@ int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
             (*rte)[rte_cnt].guid = (int64_t*) ((char*) ((*rte)[rte_cnt].hdr + 1) + (*rte)[rte_cnt].hdr->name_len);
             (*rte)[rte_cnt].hdr2 = (struct fsh_hdr2*) ((*rte)[rte_cnt].guid + (*rte)[rte_cnt].hdr->guid_cnt);
             (*rte)[rte_cnt].pt = (struct fsh_pt*) ((*rte)[rte_cnt].hdr2 + 1);
-//            (*rte)[rte_cnt].pt_cnt = count_pt((*rte)[rte_cnt].hdr2->lat, (*rte)[rte_cnt].hdr2->lon, (*rte)[rte_cnt].pt);
             (*rte)[rte_cnt].hdr3 = (struct fsh_hdr3*) ((*rte)[rte_cnt].pt + (*rte)[rte_cnt].hdr->guid_cnt);
             (*rte)[rte_cnt].wpt = (fsh_wpt_t*) ((*rte)[rte_cnt].hdr3 + 1);
 
-            //fprintf(stderr, "rte_cnt = %d, pt_cnt = %d\n", rte_cnt, (*rte)[rte_cnt].pt_cnt);
-
             rte_cnt++;
             break;
-
-
-         default:
-            fprintf(stderr, "# block type 0x%02x not implemented yet\n", blk->hdr.type);
       }
    }
    return rte_cnt;
+}
+
+
+void fsh_free_block_data(fsh_block_t *blk)
+{
+   for (; blk->hdr.type != 0xffff; blk++)
+      free(blk->data);
 }
 
 
@@ -367,6 +344,7 @@ static void usage(const char *s)
 
 int main(int argc, char **argv)
 {
+   fsh_file_header_t fhdr;
    track_t *trk = NULL;
    route21_t *rte = NULL;
    fsh_block_t *blk;
@@ -386,16 +364,12 @@ int main(int argc, char **argv)
             break;
       }
 
-   read_rl90(fd);
-   read_rayflob(fd);
+   fsh_read_file_header(fd, &fhdr);
+   fprintf(stderr, "# header values 0x%08x, 0x%04x\n", fhdr.a, fhdr.h & 0xffff);
 
    blk = fsh_block_read(fd);
 
    rte_cnt = fsh_route_decode(blk, &rte);
-
-   route_output(stdout, rte, rte_cnt);
-
-#if 0
    trk_cnt = fsh_track_decode(blk, &trk);
 
    init_ellipsoid(&el);
@@ -403,8 +377,15 @@ int main(int argc, char **argv)
    if (osm_out)
       track_output_osm(stdout, trk, trk_cnt, &el);
    else
+   {
       track_output(stdout, trk, trk_cnt, &el);
-#endif
+      route_output(stdout, rte, rte_cnt);
+   }
+
+   free(rte);
+   free(trk);
+   fsh_free_block_data(blk);
+   free(blk);
 
    return 0;
 }

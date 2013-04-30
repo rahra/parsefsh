@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -Wextra -g
 LDFLAGS = -lm
 
 parsefsh: parsefsh.o fshfunc.o

@@ -1,3 +1,25 @@
+/* Copyright 2013 Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>
+ *
+ * This file is part of Parsefsh.
+ *
+ * Smrender is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * Parsefsh is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Parsefsh. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*! This file contains the FSH parsing functions.
+ *
+ *  @author Bernhard R. Fischer
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -18,6 +40,8 @@ char *guid_to_string(uint64_t guid)
 }
 
 
+/*! Read add parse file header.
+ */
 int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
 {
    int len;
@@ -25,7 +49,7 @@ int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
    if ((len = read(fd, fhdr, sizeof(*fhdr))) == -1)
       perror("read"), exit(EXIT_FAILURE);
 
-   if (len < sizeof(*fhdr))
+   if (len < (int) sizeof(*fhdr))
       fprintf(stderr, "# file header truncated, read %d of %ld\n", len, sizeof(*fhdr)),
          exit(EXIT_FAILURE);
 
@@ -38,6 +62,11 @@ int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
 }
 
 
+/*! This function reads all blocks into a fsh_block_t list. The type of the
+ * last block (which does not contain data anymore) is set to 0xffff.
+ * @return Returns a pointer to the first fsh_block_t. The list MUST be freed
+ * by the caller again with a call to free and the pointer to the first block.
+ */
 fsh_block_t *fsh_block_read(int fd)
 {
    int blk_cnt, len, pos, rlen;
@@ -56,7 +85,7 @@ fsh_block_t *fsh_block_read(int fd)
             pos, blk[blk_cnt].hdr.type, blk[blk_cnt].hdr.len, guid_to_string(blk[blk_cnt].hdr.guid));
       pos += len;
 
-      if (len < sizeof(blk[blk_cnt].hdr))
+      if (len < (int) sizeof(blk[blk_cnt].hdr))
       {
          fprintf(stderr, "# header truncated, read %d of %ld\n", len, sizeof(blk[blk_cnt].hdr));
          blk[blk_cnt].hdr.type = 0xffff;
@@ -88,6 +117,13 @@ fsh_block_t *fsh_block_read(int fd)
 }
 
 
+/*! This function decodes track blocks (0x0d and 0x0e) into a track_t structure.
+ * @param blk Pointer to the first fsh block.
+ * @param trk Pointer to a track_t pointer. This variable will receive a
+ * pointer to the first track. The caller must free the track list again with a
+ * pointer to the first track.
+ * @return Returns the number of tracks that have been decoded.
+ */
 int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
 {
    int i, trk_cnt = 0;
@@ -132,6 +168,13 @@ int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
 }
 
 
+/*! This function decodes route blocks (0x21) into a route21_t structure.
+ * @param blk Pointer to the first fsh block.
+ * @param trk Pointer to a route21_t pointer. This variable will receive a
+ * pointer to the first route. The caller must free the route list again with a
+ * pointer to the first route.
+ * @return Returns the number of routes that have been decoded.
+ */
 int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
 {
    int rte_cnt = 0;
@@ -163,6 +206,10 @@ int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
 }
 
 
+/*! Free all data pointers within the block list. This MUST be called before
+ * the block list is freed itself.
+ * @param blk Pointer to the first block.
+ */
 void fsh_free_block_data(fsh_block_t *blk)
 {
    for (; blk->hdr.type != 0xffff; blk++)

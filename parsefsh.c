@@ -1,3 +1,26 @@
+/* Copyright 2013 Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>
+ *
+ * This file is part of Parsefsh.
+ *
+ * Smrender is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * Parsefsh is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Parsefsh. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*! This file contains the main() function, the output functions and the
+ *  functions for the coordinate transformations.
+ *
+ *  @author Bernhard R. Fischer
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -10,13 +33,26 @@
 #include "fshfunc.h"
 
 
-
+/*! This function derives the ellipsoid parameters from the semi-major and
+ * semi-minor axis.
+ * @param el A pointer to an ellipsoid structure. el->a and el->b MUST be
+ * pre-initialized.
+ */
 static void init_ellipsoid(ellipsoid_t *el)
 {
    el->e = sqrt(1 - pow(el-> b / el-> a, 2));
 }
 
 
+/*! This function calculates the nearest geographic latitude to the reference
+ * latitude phi0 from the Northing N based on the ellipsoid el. It must be
+ * called iteratively to gain an appropriate accuracy.
+ * @param el Pointer to the ellipsoid data.
+ * @param N Northing according to the Mercator projection.
+ * @param phi0 Reference latitude in radians. If phi0 = 0 (e.g. initially) a
+ * spherical reverse Mercator is calculated.
+ * @return Returns the latitude in radians.
+ */
 static double phi_rev_merc(const ellipsoid_t *el, double N, double phi0)
 {
    double esin = el->e * sin(phi0);
@@ -24,6 +60,13 @@ static double phi_rev_merc(const ellipsoid_t *el, double N, double phi0)
 }
 
 
+/*! This function derives the geographic latitude from the Mercator Northing N.
+ * It iteratively calls phi_rev_merc(). At a maximum it iterates either MAX_IT
+ * times or until the accuracy is less than IT_ACCURACY.
+ * @param el Pointer to the ellipsoid data.
+ * @param N Mercator Northing.
+ * @return Returns the latitude in radians.
+ */
 static double phi_iterate_merc(const ellipsoid_t *el, double N)
 {
    double phi, phi0;
@@ -39,11 +82,28 @@ static double phi_iterate_merc(const ellipsoid_t *el, double N)
 }
 
 
+/*! Latitude and longitude in 0x0e track blocks are given in Mercator Northing
+ * and Easting but are prescaled by some factors. This function reverses the
+ * scaling.
+ * @param lat0 Scaled Northing from 0x0e track point.
+ * @param lon0 Scaled Easting from 0x0e track point.
+ * @param lat Variable to receive result Northing.
+ * @param lon Variable to receuve result Easting.
+ */
+static void raycoord_norm(int32_t lat0, int32_t lon0, double *lat, double *lon)
+{
+   *lat = lat0 / FSH_LAT_SCALE;
+   *lon = lon0 / FSH_LON_SCALE * 180.0;
+}
+
+
 // only used for debugging and reverse engineering
 #define REVENG
 #ifdef REVENG
 static const char hex_[] = "0123456789abcdef";
 
+/*! This function output len bytes starting at buf in hexadecimal numbers.
+ */
 static void hexdump(void *buf, int len)
 {
    int i;
@@ -53,13 +113,6 @@ static void hexdump(void *buf, int len)
    printf("\n");
 }
 #endif
-
-
-static void raycoord_norm(int32_t lat0, int32_t lon0, double *lat, double *lon)
-{
-   *lat = lat0 / FSH_LAT_SCALE;
-   *lon = lon0 / FSH_LON_SCALE * 180.0;
-}
 
 
 static void osm_start(FILE *out)
@@ -260,10 +313,9 @@ int route_output(FILE *out, const route21_t *rte, int cnt)
 static void usage(const char *s)
 {
    printf(
-         "parsefsh (c) 2013 by Bernhard R. Fischer, <bf@abenteuerland.at>\n"
          "usage: %s [OPTIONS]\n"
          "   -h ............. This help.\n"
-         "   -o ............. Output OSM format instead of CSV.\n",
+         "   -c ............. Output CSV format instead of OSM.\n",
          s);
 }
 
@@ -275,21 +327,23 @@ int main(int argc, char **argv)
    route21_t *rte;
    fsh_block_t *blk;
    ellipsoid_t el = WGS84;
-   int fd = 0, trk_cnt = 0, osm_out = 0, rte_cnt = 0;
+   int fd = 0, trk_cnt = 0, osm_out = 1, rte_cnt = 0;
    FILE *out = stdout;
    int c;
 
-   while ((c = getopt(argc, argv, "ho")) != -1)
+   fprintf(stderr, "# ARCHIVE.FSH decoder (c) 2013 by Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>\n");
+   while ((c = getopt(argc, argv, "ch")) != -1)
       switch (c)
       {
+         case 'c':
+            osm_out = 0;
+            break;
+ 
          case 'h':
             usage(argv[0]);
             return 0;
 
-         case 'o':
-            osm_out = 1;
-            break;
-      }
+     }
 
    fsh_read_file_header(fd, &fhdr);
    fprintf(stderr, "# header values 0x%08x, 0x%04x\n", fhdr.a, fhdr.h & 0xffff);

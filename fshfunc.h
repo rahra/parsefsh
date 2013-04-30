@@ -186,6 +186,8 @@ typedef struct route21
    fsh_wpt_t *wpt;         //!< pointer to the first waypoint. Note, it does
                            //!< not increase linearly because fsh_wpt_t
                            //!< contains a variable length array if name_len length.
+
+   int first_id, last_id;     //!< IDs, used for OSM output
 } route21_t;
 
 // structure to keep ellipsoid data

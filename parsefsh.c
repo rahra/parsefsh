@@ -62,11 +62,29 @@ static void raycoord_norm(int32_t lat0, int32_t lon0, double *lat, double *lon)
 }
 
 
-int track_output_osm(FILE *out, track_t *trk, int cnt, const ellipsoid_t *el)
+static void osm_start(FILE *out)
 {
+   fprintf(out, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<osm version=\"0.6\" generator=\"parsefsh\">\n");
+}
+
+
+static void osm_end(FILE *out)
+{
+   fprintf(out, "</osm>\n");
+}
+
+
+static int get_id(void)
+{
+   static int id = 0;
+   return --id;
+}
+
+
  #define TBUFLEN 24
+int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *el)
+{
    char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
-   static int id = -1;
    double lat, lon;
    struct tm *tm;
    time_t t;
@@ -76,11 +94,9 @@ int track_output_osm(FILE *out, track_t *trk, int cnt, const ellipsoid_t *el)
    if ((tm = gmtime(&t)) != NULL)
       strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", tm);
 
-   fprintf(out, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<osm version=\"0.6\" generator=\"parsefsh\">\n");
-
    for (j = 0; j < cnt; j++)
    {
-      trk[j].first_id = id;
+      trk[j].first_id = get_id();
       for (i = 0; i < trk[j].hdr->cnt; i++)
       {
          if (trk[j].pt[i].c == -1)
@@ -94,14 +110,29 @@ int track_output_osm(FILE *out, track_t *trk, int cnt, const ellipsoid_t *el)
                "      <tag k=\"seamark:type\" v=\"sounding\"/>\n"
                "      <tag k=\"seamark:sounding\" v=\"%.1f\"/>\n"
                "   </node>\n",
-               id--, lat, lon, ts, (double) trk[j].pt[i].depth / 100);
+               get_id() + 1, lat, lon, ts, (double) trk[j].pt[i].depth / 100);
       }
-      trk[j].last_id = id + 1;
+      trk[j].last_id = get_id() + 2;
    }
+
+   return 0;
+}
+
+
+int track_output_osm_ways(FILE *out, track_t *trk, int cnt)
+{
+   char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
+   struct tm *tm;
+   time_t t;
+   int i, j;
+
+   time(&t);
+   if ((tm = gmtime(&t)) != NULL)
+      strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", tm);
 
    for (j = 0; j < cnt; j++)
    {
-      fprintf(out, "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n", id--, ts);
+      fprintf(out, "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n", get_id(), ts);
       fprintf(out, "      <tag k=\"name\" v=\"%s\"/>\n", trk[j].mta->name1);
       fprintf(out, "      <tag k=\"fsh:type\" v=\"track\"/>\n");
       for (i = trk[j].first_id; i >= trk[j].last_id; i--)
@@ -110,9 +141,6 @@ int track_output_osm(FILE *out, track_t *trk, int cnt, const ellipsoid_t *el)
       }
       fprintf(out, "   </way>\n");
    }
-
-   fprintf(out, "</osm>\n");
-
    return 0;
 }
 
@@ -135,6 +163,62 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
          fprintf(out, "%d, %d, %.8f, %.8f, %d, %s\n",
                trk[j].pt[i].lat, trk[j].pt[i].lon, lat, lon, trk[j].pt[i].depth, trk[j].mta->name1);
       }
+   }
+   return 0;
+}
+
+
+int route_output_osm_nodes(FILE *out, route21_t *rte, int cnt)
+{
+   char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
+   fsh_wpt_t *wpt;
+   struct tm *tm;
+   time_t t;
+   int i, j;
+
+   time(&t);
+   if ((tm = gmtime(&t)) != NULL)
+      strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", tm);
+
+   for (j = 0; j < cnt; j++)
+   {
+      rte[j].first_id = get_id();
+      for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
+      {
+         fprintf(out,
+               "   <node id=\"%d\" lat=\"%.7f\" lon=\"%.7f\" timestamp=\"%s\">\n"
+               "      <tag k=\"name\" v=\"%.*s\"/>\n"
+               "   </node>\n",
+               get_id() + 1, wpt->lat / 1E7, wpt->lon / 1E7, ts, wpt->name_len, wpt->name);
+         wpt = (fsh_wpt_t*) ((char*) wpt + wpt->name_len + sizeof(*wpt));
+      }
+      rte[j].last_id = get_id() + 2;
+   }
+   return 0;
+}
+
+
+int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
+{
+   char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
+   struct tm *tm;
+   time_t t;
+   int i, j;
+
+   time(&t);
+   if ((tm = gmtime(&t)) != NULL)
+      strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", tm);
+
+   for (j = 0; j < cnt; j++)
+   {
+      fprintf(out,
+            "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n"
+            "      <tag k=\"name\" v=\"%.*s\"/>\n"
+            "      <tag k=\"fsh:type\" v=\"route\"/>\n",
+            get_id(), ts, rte[j].hdr->name_len, rte[j].hdr->name);
+      for (i = rte[j].first_id; i >= rte[j].last_id; i--)
+         fprintf(out, "      <nd ref=\"%d\"/>\n", i);
+      fprintf(out, "   </way>\n");
    }
    return 0;
 }
@@ -187,11 +271,12 @@ static void usage(const char *s)
 int main(int argc, char **argv)
 {
    fsh_file_header_t fhdr;
-   track_t *trk = NULL;
-   route21_t *rte = NULL;
+   track_t *trk;
+   route21_t *rte;
    fsh_block_t *blk;
    ellipsoid_t el = WGS84;
    int fd = 0, trk_cnt = 0, osm_out = 0, rte_cnt = 0;
+   FILE *out = stdout;
    int c;
 
    while ((c = getopt(argc, argv, "ho")) != -1)
@@ -217,11 +302,18 @@ int main(int argc, char **argv)
    init_ellipsoid(&el);
 
    if (osm_out)
-      track_output_osm(stdout, trk, trk_cnt, &el);
+   {
+      osm_start(out);
+      track_output_osm_nodes(out, trk, trk_cnt, &el);
+      route_output_osm_nodes(out, rte, rte_cnt);
+      track_output_osm_ways(out, trk, trk_cnt);
+      route_output_osm_ways(out, rte, rte_cnt);
+      osm_end(out);
+   }
    else
    {
-      track_output(stdout, trk, trk_cnt, &el);
-      route_output(stdout, rte, rte_cnt);
+      track_output(out, trk, trk_cnt, &el);
+      route_output(out, rte, rte_cnt);
    }
 
    free(rte);

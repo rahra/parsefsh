@@ -1,5 +1,5 @@
-#ifndef PARSEFSH_H
-#define PARSEFSH_H
+#ifndef FSHFUNC_H
+#define FSHFUNC_H
 
 #include <stdint.h>
 
@@ -195,6 +195,13 @@ typedef struct ellipsoid
    double b;   //!< semi-minor axis in m (polar)
    double e;   //!< eccentricity (this is derived from a and b, call init_ellipsoid())
 } ellipsoid_t;
+
+char *guid_to_string(uint64_t );
+int fsh_read_file_header(int , fsh_file_header_t *);
+fsh_block_t *fsh_block_read(int );
+int fsh_track_decode(const fsh_block_t *, track_t **);
+int fsh_route_decode(const fsh_block_t *, route21_t **);
+void fsh_free_block_data(fsh_block_t *);
 
 #endif
 

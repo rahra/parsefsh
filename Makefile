@@ -2,9 +2,11 @@ CC = gcc
 CFLAGS = -Wall -g
 LDFLAGS = -lm
 
-parsefsh: parsefsh.o
+parsefsh: parsefsh.o fshfunc.o
 
-parsefsh.o: parsefsh.c parsefsh.h
+parsefsh.o: parsefsh.c fshfunc.h
+
+fshfunc.o: fshfunc.c fshfunc.h
 
 clean:
 	rm -f *.o parsefsh

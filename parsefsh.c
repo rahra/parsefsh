@@ -165,6 +165,10 @@ int route_output(FILE *out, const route21_t *rte, int cnt)
       t = rte[j].hdr2->timestamp / 10000000000L;
       fprintf(out, "# %f, %f, %s", (double) rte[j].hdr2->lat / 1E7, (double) rte[j].hdr2->lon / 1E7, ctime(&t));
       hexdump(rte[j].hdr2->d, sizeof(rte[j].hdr2->d));
+
+      for (i = 0; i < rte[j].hdr->guid_cnt; i++)
+         fprintf(out, "# %d, %d, %d, %d, %d\n", rte[j].pt[i].a, rte[j].pt[i].b, rte[j].pt[i].c, rte[j].pt[i].d, rte[j].pt[i].e);
+
       fprintf(out, "# wpt_cnt %d\n", rte[j].hdr3->wpt_cnt);
       fprintf(out, "# guid_cnt %d\n", rte[j].hdr->guid_cnt);
 

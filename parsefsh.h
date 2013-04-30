@@ -114,17 +114,6 @@ typedef struct fsh_route22_header
 
 } __attribute__ ((packed)) fsh_route22_header_t;
 
-/*// header before waypoints in route after guid list
-typedef struct fsh_wpt_header
-{
-   uint64_t time1;
-   uint64_t time2;
-   uint32_t weird;      //!< according to Emmons
-   char a[26];
-
-} __attribute__ ((packed)) fsh_wpt_header_t;
-*/
-
 // waypoint length 56 bytes (without var. length name)
 typedef struct fsh_wpt
 {
@@ -157,10 +146,10 @@ struct fsh_hdr2
 struct fsh_pt
 {
    int16_t a;
-   int16_t b;
+   int16_t b;        //!< depth?
    int16_t c;        //!< always 0
    int16_t d;        //!< in the first element same value like b
-   int16_t e;        //!< mostly 1 or 2
+   int16_t e;        //!< mostly 0, 1, or 2
 } __attribute__ ((packed));
 
 struct fsh_hdr3

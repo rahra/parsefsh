@@ -310,6 +310,16 @@ int route_output(FILE *out, const route21_t *rte, int cnt)
 }
 
 
+static void check_endian(void)
+{
+   int c = 1;
+
+   if (!*((char*) &c))
+      fprintf(stderr, "# parsefsh currently only works on little endian machines (such as Intel)\n"),
+         exit(EXIT_FAILURE);
+}
+
+
 static void usage(const char *s)
 {
    printf(
@@ -345,6 +355,7 @@ int main(int argc, char **argv)
 
      }
 
+   check_endian();
    fsh_read_file_header(fd, &fhdr);
    fprintf(stderr, "# header values 0x%08x, 0x%04x\n", fhdr.a, fhdr.h & 0xffff);
 

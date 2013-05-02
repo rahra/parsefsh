@@ -88,11 +88,13 @@ typedef struct fsh_track_meta
    int16_t d;        //!< unknown, always 0
    int32_t lat_start;//!< Northing of first track point
    int32_t lon_start;//!< Easting of first track point
-   int32_t e;        //!< unknown
+   int16_t e;        //!< unknown, same value as 'a' from first track point
+   int16_t e1;       //!< unknown
    int16_t f;        //!< unknown, always 0
    int32_t lat_end;  //!< Northing of last track point
    int32_t lon_end;  //!< Easting of last track point
-   int32_t g;        //!< unknown
+   int16_t g;        //!< unknown, same as 'a' from last track point
+   int16_t g1;       //!< unknown
    int16_t h;        //!< unknown, always 0
    char i;           //!< unknown, 0, 1, or 5;
    char name[16];    //!< name of track, string not terminated
@@ -109,13 +111,6 @@ typedef struct fsh_block_header
    uint16_t type;    //!< type of block
    uint16_t unknown;
 } __attribute__ ((packed)) fsh_block_header_t;
-
-// fsh block
-typedef struct fsh_block
-{
-   fsh_block_header_t hdr;
-   void *data;
-} __attribute__ ((packed)) fsh_block_t; 
 
 // route type 0x21
 typedef struct fsh_route21_header
@@ -181,6 +176,13 @@ struct fsh_hdr3
 
 
 /*** memory structures used by parsefsh ***/
+
+// fsh block
+typedef struct fsh_block
+{
+   fsh_block_header_t hdr;
+   void *data;
+} __attribute__ ((packed)) fsh_block_t; 
 
 // memory structure for keeping a track
 typedef struct track

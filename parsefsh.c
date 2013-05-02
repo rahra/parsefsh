@@ -36,6 +36,7 @@
 #define DEGSCALE (M_PI / 180.0)
 #define DEG2RAD(x) ((x) * DEGSCALE)
 #define RAD2DEG(x) ((x) / DEGSCALE)
+#define DEG2M(x) ((x) * 60 * 1852)
 
 
 struct coord
@@ -244,13 +245,17 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 {
    struct coord cd, cd0;
    struct pcoord pc = {0, 0};
-   //double lat, lon;
+   double dist;
    int i, j;
 
    for (j = 0; j < cnt; j++)
    {
+      fprintf(out, "# ----- BEGIN TRACK -----\n");
+      fprintf(out, "# name = '%.*s', e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x\n",
+            (int) sizeof(trk[j].mta->name), trk[j].mta->name,  trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1);
       fprintf(out, "# NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], A, A [hex], C, bearing, distance [m], TRACKNAME\n");
-      for (i = 0; i < trk[j].hdr->cnt; i++)
+
+      for (i = 0, dist = 0; i < trk[j].hdr->cnt; i++)
       {
          if (trk[j].pt[i].c == -1)
             continue;
@@ -263,8 +268,11 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
             pc = coord_diff(&cd0, &cd);
 
          fprintf(out, "%d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f, %.*s\n",
-               i, trk[j].pt[i].lat, trk[j].pt[i].lon, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, pc.dist * 60 * 1852, (int) sizeof(trk[j].mta->name), trk[j].mta->name);
+               i, trk[j].pt[i].lat, trk[j].pt[i].lon, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, DEG2M(pc.dist), (int) sizeof(trk[j].mta->name), trk[j].mta->name);
+         dist += pc.dist;
       }
+      fprintf(out, "# total distance = %.1f nm, %.1f m\n", dist * 60, DEG2M(dist));
+      fprintf(out, "# ----- END TRACK -----\n");
    }
    return 0;
 }

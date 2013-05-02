@@ -86,17 +86,16 @@ typedef struct fsh_track_meta
    int16_t b;        //!< unknown, always 0
    int16_t c;        //!< unknown
    int16_t d;        //!< unknown, always 0
-   int32_t lat_start;
-   int32_t lon_start;
+   int32_t lat_start;//!< Northing of first track point
+   int32_t lon_start;//!< Easting of first track point
    int32_t e;        //!< unknown
    int16_t f;        //!< unknown, always 0
-   int32_t lat_end;
-   int32_t lon_end;
+   int32_t lat_end;  //!< Northing of last track point
+   int32_t lon_end;  //!< Easting of last track point
    int32_t g;        //!< unknown
    int16_t h;        //!< unknown, always 0
-   char i;           //!< unknown, always 5;
-   char name1[8];
-   char name2[8];    //!< not sure if name2 is slack space of name1
+   char i;           //!< unknown, 0, 1, or 5;
+   char name[16];    //!< name of track, string not terminated
    int16_t j;        //!< unknown, probably flags, always 0x0100
    // at position 58, last 8 bytes are a guid
    uint64_t guid;

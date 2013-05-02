@@ -33,6 +33,22 @@
 #include "fshfunc.h"
 
 
+#define DEGSCALE (M_PI / 180.0)
+#define DEG2RAD(x) ((x) * DEGSCALE)
+#define RAD2DEG(x) ((x) / DEGSCALE)
+
+
+struct coord
+{
+   double lat, lon;
+};
+
+struct pcoord
+{
+   double bearing, dist;
+};
+
+
 /*! This function derives the ellipsoid parameters from the semi-major and
  * semi-minor axis.
  * @param el A pointer to an ellipsoid structure. el->a and el->b MUST be
@@ -79,6 +95,32 @@ static double phi_iterate_merc(const ellipsoid_t *el, double N)
    }
 
    return phi;
+}
+
+
+/*! Calculate bearing and distance from src to dst.
+ *  @param src Source coodinates (struct coord).
+ *  @param dst Destination coordinates (struct coord).
+ *  @return Returns a struct pcoord. Pcoord contains the orthodrome distance in
+ *  degrees and the bearing, 0 degress north, clockwise.
+ */
+static struct pcoord coord_diff(const struct coord *src, const struct coord *dst)
+{
+   struct pcoord pc;
+   double dlat, dlon;
+
+   dlat = dst->lat - src->lat;
+   dlon = (dst->lon - src->lon) * cos(DEG2RAD((src->lat + dst->lat) / 2.0));
+
+   pc.bearing = RAD2DEG(atan2(dlon, dlat));
+   pc.dist = RAD2DEG(acos(
+      sin(DEG2RAD(src->lat)) * sin(DEG2RAD(dst->lat)) + 
+      cos(DEG2RAD(src->lat)) * cos(DEG2RAD(dst->lat)) * cos(DEG2RAD(dst->lon - src->lon))));
+
+   if (pc.bearing  < 0)
+      pc.bearing += 360.0;
+
+   return pc;
 }
 
 
@@ -186,7 +228,7 @@ int track_output_osm_ways(FILE *out, track_t *trk, int cnt)
    for (j = 0; j < cnt; j++)
    {
       fprintf(out, "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n", get_id(), ts);
-      fprintf(out, "      <tag k=\"name\" v=\"%s\"/>\n", trk[j].mta->name1);
+      fprintf(out, "      <tag k=\"name\" v=\"%s\"/>\n", trk[j].mta->name);
       fprintf(out, "      <tag k=\"fsh:type\" v=\"track\"/>\n");
       for (i = trk[j].first_id; i >= trk[j].last_id; i--)
       {
@@ -200,21 +242,28 @@ int track_output_osm_ways(FILE *out, track_t *trk, int cnt)
 
 int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 {
-   double lat, lon;
+   struct coord cd, cd0;
+   struct pcoord pc = {0, 0};
+   //double lat, lon;
    int i, j;
 
    for (j = 0; j < cnt; j++)
    {
+      fprintf(out, "# NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], A, A [hex], C, bearing, distance [m], TRACKNAME\n");
       for (i = 0; i < trk[j].hdr->cnt; i++)
       {
          if (trk[j].pt[i].c == -1)
             continue;
 
-         raycoord_norm(trk[j].pt[i].lat, trk[j].pt[i].lon, &lat, &lon);
-         lat = phi_iterate_merc(el, lat) * 180 / M_PI;
+         cd0 = cd;
+         raycoord_norm(trk[j].pt[i].lat, trk[j].pt[i].lon, &cd.lat, &cd.lon);
+         cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
 
-         fprintf(out, "%d, %d, %.8f, %.8f, %d, %s\n",
-               trk[j].pt[i].lat, trk[j].pt[i].lon, lat, lon, trk[j].pt[i].depth, trk[j].mta->name1);
+         if (i)
+            pc = coord_diff(&cd0, &cd);
+
+         fprintf(out, "%d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f, %.*s\n",
+               i, trk[j].pt[i].lat, trk[j].pt[i].lon, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, pc.dist * 60 * 1852, (int) sizeof(trk[j].mta->name), trk[j].mta->name);
       }
    }
    return 0;

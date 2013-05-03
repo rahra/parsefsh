@@ -205,8 +205,9 @@ int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *
                "   <node id=\"%d\" lat=\"%.8f\" lon=\"%.8f\" version=\"1\" timestamp=\"%s\">\n"
                "      <tag k=\"seamark:type\" v=\"sounding\"/>\n"
                "      <tag k=\"seamark:sounding\" v=\"%.1f\"/>\n"
+               "      <tag k=\"fsh:id\" v=\"%d:%d\"/>\n"
                "   </node>\n",
-               get_id() + 1, lat, lon, ts, (double) trk[j].pt[i].depth / 100);
+               get_id() + 1, lat, lon, ts, (double) trk[j].pt[i].depth / 100, j, i);
       }
       trk[j].last_id = get_id() + 2;
    }

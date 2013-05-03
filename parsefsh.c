@@ -147,7 +147,7 @@ static const char hex_[] = "0123456789abcdef";
 
 /*! This function output len bytes starting at buf in hexadecimal numbers.
  */
-static void hexdump(void *buf, int len)
+static void hexdump(const void *buf, int len)
 {
    int i;
 
@@ -338,7 +338,6 @@ int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
 int route_output(FILE *out, const route21_t *rte, int cnt)
 {
    fsh_wpt_t *wpt;
-   time_t t;
    int i, j;
 
    for (j = 0; j < cnt; j++)
@@ -347,12 +346,14 @@ int route_output(FILE *out, const route21_t *rte, int cnt)
       for (i = 0; i < rte[j].hdr->guid_cnt; i++)
          fprintf(out, "#   %s\n", guid_to_string(rte[j].guid[i]));
 
-      t = rte[j].hdr2->timestamp / 10000000000L;
-      fprintf(out, "# %f, %f, %s", (double) rte[j].hdr2->lat / 1E7, (double) rte[j].hdr2->lon / 1E7, ctime(&t));
-      hexdump(rte[j].hdr2->d, sizeof(rte[j].hdr2->d));
+      fprintf(out, "# lat0 = %.7f, lon0 = %.7f, lat1 = %.7f, lon1 = %.7f\n# hdr2: ",
+            (double) rte[j].hdr2->lat0 / 1E7, (double) rte[j].hdr2->lon0 / 1E7,
+            (double) rte[j].hdr2->lat1 / 1E7, (double) rte[j].hdr2->lon1 / 1E7);
+      hexdump((char*) rte[j].hdr2 + 16, sizeof(*rte[j].hdr2) - 16);
+      fprintf(out, "# hdr2 [dec]: %d, %d\n", rte[j].hdr2->a, rte[j].hdr2->c);
 
       for (i = 0; i < rte[j].hdr->guid_cnt; i++)
-         fprintf(out, "# %d, %d, %d, %d, %d\n", rte[j].pt[i].a, rte[j].pt[i].b, rte[j].pt[i].c, rte[j].pt[i].d, rte[j].pt[i].e);
+         fprintf(out, "# %d, %d, %d, %d, %d\n", rte[j].pt[i].a, rte[j].pt[i].b, rte[j].pt[i].c, rte[j].pt[i].d, rte[j].pt[i].sym);
 
       fprintf(out, "# wpt_cnt %d\n", rte[j].hdr3->wpt_cnt);
       fprintf(out, "# guid_cnt %d\n", rte[j].hdr->guid_cnt);

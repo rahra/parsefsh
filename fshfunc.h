@@ -136,25 +136,25 @@ typedef struct fsh_wpt
    int64_t guid;
    int32_t lat, lon;
    uint64_t timestamp;
-   char d[12];          //!< 12x \0
-   char sym;            //!< probably symbol
+   char d[12];         //!< 12x \0
+   char sym;           //!< probably symbol
    int16_t e;          //!< unknown, always -1
    int32_t f;          //!< unknown, always -1
    int32_t g;          //!< unknown
    uint16_t h;         //!< unknown
    char i;             //!< unknown, always 0
-   int16_t name_len;    //!< length of name array
-   int32_t j;           //!< unknown, always 0
-   char name[];         //!< unterminated wpt name
+   int16_t name_len;   //!< length of name array
+   int32_t j;          //!< unknown, always 0
+   char name[];        //!< unterminated wpt name
 } __attribute__ ((packed)) fsh_wpt_t;
 
 
 struct fsh_hdr2
 {
-   int32_t lat, lon;
-   int64_t timestamp;
-   int16_t a;
-   int16_t b;           //!< 0 or 1
+   int32_t lat0, lon0;  //!< lat/lon of first waypoint
+   int32_t lat1, lon1;  //!< lat/lon of last waypoint
+   int32_t a;
+   //int16_t b;           //!< 0 or 1
    int16_t c;
    char d[24];
 } __attribute__ ((packed));
@@ -165,7 +165,7 @@ struct fsh_pt
    int16_t b;        //!< depth?
    int16_t c;        //!< always 0
    int16_t d;        //!< in the first element same value like b
-   int16_t e;        //!< mostly 0, 1, or 2
+   int16_t sym;      //!< seems to be the symbol
 } __attribute__ ((packed));
 
 struct fsh_hdr3

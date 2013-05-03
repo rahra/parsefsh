@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g
 LDFLAGS = -lm
-VERSION = 1.0-1460
+VERSION = 1.0-1461
 DISTDIR = parsefsh-$(VERSION)
 
 parsefsh: parsefsh.o fshfunc.o

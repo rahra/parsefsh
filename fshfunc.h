@@ -35,8 +35,10 @@
 // approx 10cm in radians: 10cm / 100 / 1852 / 60 / 180 * M_PI
 #define IT_ACCURACY 1.5E-8
 
-// Northing in FSH is prescaled by this
+// Northing in FSH is prescaled by this (empirically determined)
 #define FSH_LAT_SCALE 107.1709342
+// probably this value is more accurate, not sure.
+//#define FSH_LAT_SCALE 107.1710725
 // Easting is scaled by this
 #define FSH_LON_SCALE ((double) 0x7fffffff)
 
@@ -63,10 +65,10 @@ typedef struct fsh_file_header
 // total length 14 bytes
 typedef struct fsh_track_point
 {
-   int32_t lat, lon;
-   int16_t a;        //!< unknown
-   int16_t depth;    //!< depth in cm
-   int16_t c;        //!< unknown, always 0
+   int32_t north, east; //!< prescaled (FSH_LAT_SCALE) northing and easting (ellipsoid Mercator)
+   int16_t a;           //!< unknown
+   int16_t depth;       //!< depth in cm
+   int16_t c;           //!< unknown, always 0
 } __attribute__ ((packed)) fsh_track_point_t;
 
 // type 0x0d blocks (list of track points) are prepended by this.
@@ -86,13 +88,13 @@ typedef struct fsh_track_meta
    int16_t b;        //!< unknown, always 0
    int16_t c;        //!< unknown
    int16_t d;        //!< unknown, always 0
-   int32_t lat_start;//!< Northing of first track point
-   int32_t lon_start;//!< Easting of first track point
+   int32_t north_start; //!< Northing of first track point
+   int32_t east_start;  //!< Easting of first track point
    int16_t e;        //!< unknown, same value as 'a' from first track point
    int16_t e1;       //!< unknown
    int16_t f;        //!< unknown, always 0
-   int32_t lat_end;  //!< Northing of last track point
-   int32_t lon_end;  //!< Easting of last track point
+   int32_t north_end;   //!< Northing of last track point
+   int32_t east_end;    //!< Easting of last track point
    int16_t g;        //!< unknown, same as 'a' from last track point
    int16_t g1;       //!< unknown
    int16_t h;        //!< unknown, always 0
@@ -134,8 +136,8 @@ typedef struct fsh_route22_header
 typedef struct fsh_wpt
 {
    int64_t guid;
-   int32_t lat, lon;
-   uint64_t timestamp;
+   int32_t lat, lon;    //!< latitude/longitude * 1E7
+   int32_t north, east; //!< prescaled ellipsoid Mercator northing and easting
    char d[12];         //!< 12x \0
    char sym;           //!< probably symbol
    int16_t e;          //!< unknown, always -1

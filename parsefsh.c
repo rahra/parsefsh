@@ -198,7 +198,7 @@ int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *
          if (trk[j].pt[i].c == -1)
             continue;
 
-         raycoord_norm(trk[j].pt[i].lat, trk[j].pt[i].lon, &lat, &lon);
+         raycoord_norm(trk[j].pt[i].north, trk[j].pt[i].east, &lat, &lon);
          lat = phi_iterate_merc(el, lat) * 180 / M_PI;
 
          fprintf(out,
@@ -262,14 +262,14 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
             continue;
 
          cd0 = cd;
-         raycoord_norm(trk[j].pt[i].lat, trk[j].pt[i].lon, &cd.lat, &cd.lon);
+         raycoord_norm(trk[j].pt[i].north, trk[j].pt[i].east, &cd.lat, &cd.lon);
          cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
 
          if (i)
             pc = coord_diff(&cd0, &cd);
 
          fprintf(out, "%d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f, %.*s\n",
-               i, trk[j].pt[i].lat, trk[j].pt[i].lon, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, DEG2M(pc.dist), (int) sizeof(trk[j].mta->name), trk[j].mta->name);
+               i, trk[j].pt[i].north, trk[j].pt[i].east, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, DEG2M(pc.dist), (int) sizeof(trk[j].mta->name), trk[j].mta->name);
          dist += pc.dist;
       }
       fprintf(out, "# total distance = %.1f nm, %.1f m\n", dist * 60, DEG2M(dist));
@@ -279,9 +279,10 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 }
 
 
-int route_output_osm_nodes(FILE *out, route21_t *rte, int cnt)
+int route_output_osm_nodes(FILE *out, route21_t *rte, int cnt, const ellipsoid_t *el)
 {
    char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
+   struct coord cd;
    fsh_wpt_t *wpt;
    struct tm *tm;
    time_t t;
@@ -296,11 +297,15 @@ int route_output_osm_nodes(FILE *out, route21_t *rte, int cnt)
       rte[j].first_id = get_id();
       for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
       {
+         raycoord_norm(wpt->north, wpt->east, &cd.lat, &cd.lon);
+         cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
+
          fprintf(out,
                "   <node id=\"%d\" lat=\"%.7f\" lon=\"%.7f\" timestamp=\"%s\">\n"
                "      <tag k=\"name\" v=\"%.*s\"/>\n"
                "   </node>\n",
-               get_id() + 1, wpt->lat / 1E7, wpt->lon / 1E7, ts, wpt->name_len, wpt->name);
+               //get_id() + 1, wpt->lat / 1E7, wpt->lon / 1E7, ts, wpt->name_len, wpt->name);
+               get_id() + 1, cd.lat, cd.lon, ts, wpt->name_len, wpt->name);
          wpt = (fsh_wpt_t*) ((char*) wpt + wpt->name_len + sizeof(*wpt));
       }
       rte[j].last_id = get_id() + 2;
@@ -335,8 +340,9 @@ int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
 }
 
 
-int route_output(FILE *out, const route21_t *rte, int cnt)
+int route_output(FILE *out, const route21_t *rte, int cnt, const ellipsoid_t *el)
 {
+   struct coord cd;
    fsh_wpt_t *wpt;
    int i, j;
 
@@ -360,8 +366,12 @@ int route_output(FILE *out, const route21_t *rte, int cnt)
 
       for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
       {
-         fprintf(out, "# %s, %.7f, %.7f, %.*s\n", guid_to_string(wpt->guid),
-               wpt->lat / 1E7, wpt->lon / 1E7, wpt->name_len, wpt->name);
+         raycoord_norm(wpt->north, wpt->east, &cd.lat, &cd.lon);
+         cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
+ 
+         fprintf(out, "# %s, %.7f, %.7f, %.7f, %.7f, %d, %d, %d, %.*s\n", guid_to_string(wpt->guid),
+               wpt->lat / 1E7, wpt->lon / 1E7, cd.lat, cd.lon, wpt->sym, wpt->g, wpt->h, wpt->name_len, wpt->name);
+
          wpt = (fsh_wpt_t*) ((char*) wpt + wpt->name_len + sizeof(*wpt));
       }
    }
@@ -429,7 +439,7 @@ int main(int argc, char **argv)
    {
       osm_start(out);
       track_output_osm_nodes(out, trk, trk_cnt, &el);
-      route_output_osm_nodes(out, rte, rte_cnt);
+      route_output_osm_nodes(out, rte, rte_cnt, &el);
       track_output_osm_ways(out, trk, trk_cnt);
       route_output_osm_ways(out, rte, rte_cnt);
       osm_end(out);
@@ -437,7 +447,7 @@ int main(int argc, char **argv)
    else
    {
       track_output(out, trk, trk_cnt, &el);
-      route_output(out, rte, rte_cnt);
+      route_output(out, rte, rte_cnt, &el);
    }
 
    free(rte);

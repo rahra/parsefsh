@@ -252,8 +252,8 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
    for (j = 0; j < cnt; j++)
    {
       fprintf(out, "# ----- BEGIN TRACK -----\n");
-      fprintf(out, "# name = '%.*s', e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x\n",
-            (int) sizeof(trk[j].mta->name), trk[j].mta->name,  trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1);
+      fprintf(out, "# name = '%.*s', guid = %s, e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x\n",
+            (int) sizeof(trk[j].mta->name), trk[j].mta->name,  guid_to_string(trk[j].mta->guid), trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1);
       fprintf(out, "# NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], A, A [hex], C, bearing, distance [m], TRACKNAME\n");
 
       for (i = 0, dist = 0; i < trk[j].hdr->cnt; i++)

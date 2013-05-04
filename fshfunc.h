@@ -101,15 +101,16 @@ typedef struct fsh_track_meta
    char i;           //!< unknown, 0, 1, or 5;
    char name[16];    //!< name of track, string not terminated
    int16_t j;        //!< unknown, probably flags, always 0x0100
-   // at position 58, last 8 bytes are a guid
-   uint64_t guid;
+   uint64_t guid;    /*!< unique ID of track which is the guid of the FSH block
+                       header of the track point list to which this track meta
+                       data belongs to. */
 } __attribute__ ((packed)) fsh_track_meta_t;
 
 // total length 14 bytes
 typedef struct fsh_block_header
 {
    uint16_t len;     //!< length of block in bytes excluding this header
-   uint64_t guid;
+   uint64_t guid;    //!< unique ID of block
    uint16_t type;    //!< type of block
    uint16_t unknown;
 } __attribute__ ((packed)) fsh_block_header_t;
@@ -119,12 +120,12 @@ typedef struct fsh_route21_header
 {
    int16_t a;        //!< unknown, always 0
    int16_t name_len; //!< length of name of route
-   int16_t guid_cnt;
+   int16_t guid_cnt; //!< number of guids following this header
    uint16_t b;       //!< unknown
    char name[];      //!< unterminated name string of length name_len
 } __attribute__ ((packed)) fsh_route21_header_t;
 
-// route type 0x22
+// route type 0x22 (not seen yet in a file, I took this from fsh2gpx.py)
 typedef struct fsh_route22_header
 {
    int16_t name_len; //!< length of name of route

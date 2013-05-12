@@ -230,7 +230,8 @@ int track_output_osm_ways(FILE *out, track_t *trk, int cnt)
    for (j = 0; j < cnt; j++)
    {
       fprintf(out, "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n", get_id(), ts);
-      fprintf(out, "      <tag k=\"name\" v=\"%s\"/>\n", trk[j].mta->name);
+      if (trk[j].mta != NULL && trk[j].mta->name != NULL)
+         fprintf(out, "      <tag k=\"name\" v=\"%s\"/>\n", trk[j].mta->name);
       fprintf(out, "      <tag k=\"fsh:type\" v=\"track\"/>\n");
       for (i = trk[j].first_id; i >= trk[j].last_id; i--)
       {
@@ -252,8 +253,13 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
    for (j = 0; j < cnt; j++)
    {
       fprintf(out, "# ----- BEGIN TRACK -----\n");
-      fprintf(out, "# name = '%.*s', guid = %s, e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x\n",
-            (int) sizeof(trk[j].mta->name), trk[j].mta->name,  guid_to_string(trk[j].mta->guid), trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1);
+      if (trk[j].mta != NULL)
+         fprintf(out, "# name = '%.*s', guid = %s, e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x\n",
+               (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "",
+               guid_to_string(trk[j].mta->guid), trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1);
+      else
+         fprintf(out, "# no track meta data\n");
+
       fprintf(out, "# NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], A, A [hex], C, bearing, distance [m], TRACKNAME\n");
 
       for (i = 0, dist = 0; i < trk[j].hdr->cnt; i++)
@@ -268,8 +274,13 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
          if (i)
             pc = coord_diff(&cd0, &cd);
 
-         fprintf(out, "%d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f, %.*s\n",
-               i, trk[j].pt[i].north, trk[j].pt[i].east, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, DEG2M(pc.dist), (int) sizeof(trk[j].mta->name), trk[j].mta->name);
+         fprintf(out, "%d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f",
+               i, trk[j].pt[i].north, trk[j].pt[i].east, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, DEG2M(pc.dist));
+         if (trk[j].mta)
+            fprintf(out, ", %.*s\n",
+               (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
+         else
+            fprintf(out, "\n");
          dist += pc.dist;
       }
       fprintf(out, "# total distance = %.1f nm, %.1f m\n", dist * 60, DEG2M(dist));

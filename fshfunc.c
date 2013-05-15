@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
+#include <inttypes.h>
 
 
 #include "fshfunc.h"
@@ -34,7 +35,7 @@ char *guid_to_string(uint64_t guid)
 {
    static char buf[32];
 
-   snprintf(buf, sizeof(buf),  "%ld-%ld-%ld-%ld",
+   snprintf(buf, sizeof(buf),  "%"PRIu64"d-%"PRIu64"d-%"PRIu64"d-%"PRIu64"d",
          guid >> 48, (guid >> 32) & 0xffff, (guid >> 16) & 0xffff, guid & 0xffff);
    return buf;
 }
@@ -50,7 +51,7 @@ int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
       perror("read"), exit(EXIT_FAILURE);
 
    if (len < (int) sizeof(*fhdr))
-      fprintf(stderr, "# file header truncated, read %d of %ld\n", len, sizeof(*fhdr)),
+      fprintf(stderr, "# file header truncated, read %d of %d\n", len, (int) sizeof(*fhdr)),
          exit(EXIT_FAILURE);
 
    if (memcmp(fhdr->rl90, RL90_STR, strlen(RL90_STR)) ||
@@ -87,7 +88,7 @@ fsh_block_t *fsh_block_read(int fd)
 
       if (len < (int) sizeof(blk[blk_cnt].hdr))
       {
-         fprintf(stderr, "# header truncated, read %d of %ld\n", len, sizeof(blk[blk_cnt].hdr));
+         fprintf(stderr, "# header truncated, read %d of %d\n", len, (int) sizeof(blk[blk_cnt].hdr));
          blk[blk_cnt].hdr.type = 0xffff;
       }
 

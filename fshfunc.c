@@ -42,6 +42,11 @@ char *guid_to_string(uint64_t guid)
 
 
 /*! Read add parse file header.
+ *  @param fd Open file descriptor.
+ *  @param fhdr Pointer to fsh_file_header_t which will be filled by this
+ *  function.
+ *  @return Returns 0 if it es a file header (the first one). The function returns
+ *  -1 in case of error. If an I/O error occurs the function does not return.
  */
 int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
 {
@@ -54,12 +59,42 @@ int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
       fprintf(stderr, "# file header truncated, read %d of %d\n", len, (int) sizeof(*fhdr)),
          exit(EXIT_FAILURE);
 
-   if (memcmp(fhdr->rl90, RL90_STR, strlen(RL90_STR)) ||
-         memcmp(fhdr->rflob, RFLOB_STR, strlen(RFLOB_STR)))
-      fprintf(stderr, "# file seems not to be a valid ARCHIVE.FSH!\n"),
-         exit(EXIT_FAILURE);
+   if (memcmp(fhdr->rl90, RL90_STR, strlen(RL90_STR)))
+      return -1;
 
    return 0;
+}
+
+
+/*! This reads a flob header. It works like fsh_read_file_header(). */
+int fsh_read_flob_header(int fd, fsh_flob_header_t *flobhdr)
+{
+   int len;
+
+   if ((len = read(fd, flobhdr, sizeof(*flobhdr))) == -1)
+      perror("read"), exit(EXIT_FAILURE);
+
+   if (len < (int) sizeof(*flobhdr))
+      fprintf(stderr, "# flob header truncated, read %d of %d\n", len, (int) sizeof(*flobhdr)),
+         exit(EXIT_FAILURE);
+
+   if (memcmp(flobhdr->rflob, RFLOB_STR, strlen(RFLOB_STR)))
+      return -1;
+
+   return 0;
+}
+
+
+static int fsh_block_count(const fsh_block_t *blk)
+{
+   int blk_cnt;
+
+   if (blk == NULL)
+      return 0;
+
+   for (blk_cnt = 0; blk->hdr.type != 0xffff; blk++, blk_cnt++);
+
+   return blk_cnt;
 }
 
 
@@ -68,12 +103,18 @@ int fsh_read_file_header(int fd, fsh_file_header_t *fhdr)
  * @return Returns a pointer to the first fsh_block_t. The list MUST be freed
  * by the caller again with a call to free and the pointer to the first block.
  */
-fsh_block_t *fsh_block_read(int fd)
+fsh_block_t *fsh_block_read(int fd, fsh_block_t *blk)
 {
    int blk_cnt, len, pos, rlen;
-   fsh_block_t *blk = NULL;
+   //fsh_block_t *blk = NULL;
+   off_t off;
 
-   for (blk_cnt = 0, pos = 0x2a; ; blk_cnt++)   // 0x2a is the start offset after the file header
+   if ((off = lseek(fd, 0, SEEK_CUR)) == -1)
+      perror("lseek"), exit(EXIT_FAILURE);
+
+   blk_cnt = fsh_block_count(blk);
+
+   for (pos = 0; ; blk_cnt++)   // 0x2a is the start offset after the file header
    {
       if ((blk = realloc(blk, sizeof(*blk) * (blk_cnt + 1))) == NULL)
          perror("realloc"), exit(EXIT_FAILURE);
@@ -82,8 +123,8 @@ fsh_block_t *fsh_block_read(int fd)
       if ((len = read(fd, &blk[blk_cnt].hdr, sizeof(blk[blk_cnt].hdr))) == -1)
          perror("read"), exit(EXIT_FAILURE);
 
-      fprintf(stderr, "# offset = $%08x, block type = 0x%02x, len = %d, guid %s\n",
-            pos, blk[blk_cnt].hdr.type, blk[blk_cnt].hdr.len, guid_to_string(blk[blk_cnt].hdr.guid));
+      fprintf(stderr, "# offset = $%08lx, block type = 0x%02x, len = %d, guid %s\n",
+            pos + (long) off, blk[blk_cnt].hdr.type, blk[blk_cnt].hdr.len, guid_to_string(blk[blk_cnt].hdr.guid));
       pos += len;
 
       if (len < (int) sizeof(blk[blk_cnt].hdr))
@@ -118,6 +159,32 @@ fsh_block_t *fsh_block_read(int fd)
 }
 
 
+// FIXME: if GUID cross pointers in FSH file are incorrect, program will not
+// work correctly.
+static void fsh_tseg_decode0(const fsh_block_t *blk, track_t *trk)
+{
+   int i;
+
+   fprintf(stderr, "# decoding tracks\n");
+   for (; blk->hdr.type != 0xffff; blk++)
+      if (blk->hdr.type == 0x0d)
+         for (i = 0; i < trk->mta->guid_cnt; i++)
+            if (blk->hdr.guid == trk->mta->guid[i])
+            {
+               trk->tseg[i].bhdr = (fsh_block_header_t*) &blk->hdr;
+               trk->tseg[i].hdr = blk->data;
+               trk->tseg[i].pt = (fsh_track_point_t*) (trk->tseg[i].hdr + 1);
+            }
+}
+
+
+static void fsh_tseg_decode(const fsh_block_t *blk, track_t *trk, int trk_cnt)
+{
+   for (; trk_cnt; trk_cnt--, trk++)
+      fsh_tseg_decode0(blk, trk);
+}
+
+
 /*! This function decodes track blocks (0x0d and 0x0e) into a track_t structure.
  * @param blk Pointer to the first fsh block.
  * @param trk Pointer to a track_t pointer. This variable will receive a
@@ -125,45 +192,41 @@ fsh_block_t *fsh_block_read(int fd)
  * pointer to the first track.
  * @return Returns the number of tracks that have been decoded.
  */
-int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
+static int fsh_track_decode0(const fsh_block_t *blk, track_t **trk)
 {
-   int i, trk_cnt = 0;
+   int trk_cnt = 0;
 
-   fprintf(stderr, "# decoding tracks");
+   fprintf(stderr, "# decoding track metas\n");
    for (*trk = NULL; blk->hdr.type != 0xffff; blk++)
    {
       fprintf(stderr, "# decoding 0x%02x\n", blk->hdr.type);
-      switch (blk->hdr.type)
+      if (blk->hdr.type == 0x0e)
       {
-         case 0x0d:
-            fprintf(stderr, "# track\n");
+         fprintf(stderr, "# track meta\n");
 
-            if ((*trk = realloc(*trk, sizeof(**trk) * (trk_cnt + 1))) == NULL)
-               perror("realloc"), exit(EXIT_FAILURE);
+         if ((*trk = realloc(*trk, sizeof(**trk) * (trk_cnt + 1))) == NULL)
+            perror("realloc"), exit(EXIT_FAILURE);
 
-            (*trk)[trk_cnt].bhdr = (fsh_block_header_t*) &blk->hdr;
-            (*trk)[trk_cnt].hdr = blk->data;
-            (*trk)[trk_cnt].pt = (fsh_track_point_t*) ((*trk)[trk_cnt].hdr + 1);
-            (*trk)[trk_cnt].mta = NULL;
-            trk_cnt++;
-            break;
+         (*trk)[trk_cnt].bhdr = (fsh_block_header_t*) &blk->hdr;
+         (*trk)[trk_cnt].mta = blk->data;
 
-         case 0x0e:
-            fprintf(stderr, "# track meta\n");
+         if (((*trk)[trk_cnt].tseg = malloc(sizeof(*(*trk)[trk_cnt].tseg) * (*trk)[trk_cnt].mta->guid_cnt)) == NULL)
+            perror("malloc"), exit(EXIT_FAILURE);
 
-            for (i = 0; i < trk_cnt; i++)
-               if ((*trk)[i].bhdr->guid == ((fsh_track_meta_t*) blk->data)->guid)
-               {
-                  (*trk)[i].mta = blk->data;
-                  break;
-               }
-
-            if (i >= trk_cnt)
-               fprintf(stderr, "# *** track not found for track meta data!\n");
-
-            break;
+         trk_cnt++;
       }
    }
+
+   return trk_cnt;
+}
+
+
+int fsh_track_decode(const fsh_block_t *blk, track_t **trk)
+{
+   int trk_cnt;
+
+   trk_cnt = fsh_track_decode0(blk, trk);
+   fsh_tseg_decode(blk, *trk, trk_cnt);
 
    return trk_cnt;
 }
@@ -180,7 +243,7 @@ int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
 {
    int rte_cnt = 0;
 
-   fprintf(stderr, "# decoding routes");
+   fprintf(stderr, "# decoding routes\n");
    for (*rte = NULL; blk->hdr.type != 0xffff; blk++)
    {
       fprintf(stderr, "# decoding 0x%02x\n", blk->hdr.type);

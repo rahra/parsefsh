@@ -184,7 +184,7 @@ int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *
    double lat, lon;
    struct tm *tm;
    time_t t;
-   int i, j;
+   int i, j, k;
 
    time(&t);
    if ((tm = gmtime(&t)) != NULL)
@@ -193,22 +193,23 @@ int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *
    for (j = 0; j < cnt; j++)
    {
       trk[j].first_id = get_id();
-      for (i = 0; i < trk[j].hdr->cnt; i++)
-      {
-         if (trk[j].pt[i].c == -1)
-            continue;
+      for (k = 0; k < trk[j].mta->guid_cnt; k++)
+         for (i = 0; i < trk[j].tseg[k].hdr->cnt; i++)
+         {
+            if (trk[j].tseg[k].pt[i].c == -1)
+               continue;
 
-         raycoord_norm(trk[j].pt[i].north, trk[j].pt[i].east, &lat, &lon);
-         lat = phi_iterate_merc(el, lat) * 180 / M_PI;
+            raycoord_norm(trk[j].tseg[k].pt[i].north, trk[j].tseg[k].pt[i].east, &lat, &lon);
+            lat = phi_iterate_merc(el, lat) * 180 / M_PI;
 
-         fprintf(out,
+            fprintf(out,
                "   <node id=\"%d\" lat=\"%.8f\" lon=\"%.8f\" version=\"1\" timestamp=\"%s\">\n"
                "      <tag k=\"seamark:type\" v=\"sounding\"/>\n"
                "      <tag k=\"seamark:sounding\" v=\"%.1f\"/>\n"
                "      <tag k=\"fsh:id\" v=\"%d:%d\"/>\n"
                "   </node>\n",
-               get_id() + 1, lat, lon, ts, (double) trk[j].pt[i].depth / 100, j, i);
-      }
+               get_id() + 1, lat, lon, ts, (double) trk[j].tseg[k].pt[i].depth / 100, j, i);
+         }
       trk[j].last_id = get_id() + 2;
    }
 
@@ -248,41 +249,48 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
    struct coord cd, cd0;
    struct pcoord pc = {0, 0};
    double dist;
-   int i, j;
+   int i, j, k, n;
 
    for (j = 0; j < cnt; j++)
    {
       fprintf(out, "# ----- BEGIN TRACK -----\n");
       if (trk[j].mta != NULL)
-         fprintf(out, "# name = '%.*s', guid = %s, e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x\n",
+      {
+         fprintf(out, "# name = '%.*s', e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x, guid_cnt = %d\n",
                (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "",
-               guid_to_string(trk[j].mta->guid), trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1);
+               trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1, trk[j].mta->guid_cnt);
+         for (i = 0; i < trk[j].mta->guid_cnt; i++)
+            fprintf(out, "# guid[%d] = %s\n", i, guid_to_string(trk[j].mta->guid[i]));
+      }
       else
          fprintf(out, "# no track meta data\n");
 
-      fprintf(out, "# NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], A, A [hex], C, bearing, distance [m], TRACKNAME\n");
+      fprintf(out, "# CNT, NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], A, A [hex], C, bearing, distance [m], TRACKNAME\n");
 
-      for (i = 0, dist = 0; i < trk[j].hdr->cnt; i++)
-      {
-         if (trk[j].pt[i].c == -1)
-            continue;
+      for (k = 0, n = 0; k < trk[j].mta->guid_cnt; k++)
+         for (i = 0, dist = 0; i < trk[j].tseg[k].hdr->cnt; i++, n++)
+         {
+            if (trk[j].tseg[k].pt[i].c == -1)
+               continue;
 
-         cd0 = cd;
-         raycoord_norm(trk[j].pt[i].north, trk[j].pt[i].east, &cd.lat, &cd.lon);
-         cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
+            cd0 = cd;
+            raycoord_norm(trk[j].tseg[k].pt[i].north, trk[j].tseg[k].pt[i].east, &cd.lat, &cd.lon);
+            cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
 
-         if (i)
-            pc = coord_diff(&cd0, &cd);
+            if (i)
+               pc = coord_diff(&cd0, &cd);
 
-         fprintf(out, "%d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f",
-               i, trk[j].pt[i].north, trk[j].pt[i].east, cd.lat, cd.lon, trk[j].pt[i].depth, trk[j].pt[i].a, trk[j].pt[i].a, trk[j].pt[i].c, pc.bearing, DEG2M(pc.dist));
-         if (trk[j].mta)
-            fprintf(out, ", %.*s\n",
-               (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
-         else
-            fprintf(out, "\n");
-         dist += pc.dist;
-      }
+            fprintf(out, "%d, %d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f",
+                  n, i, trk[j].tseg[k].pt[i].north, trk[j].tseg[k].pt[i].east,
+                  cd.lat, cd.lon, trk[j].tseg[k].pt[i].depth, trk[j].tseg[k].pt[i].a,
+                  trk[j].tseg[k].pt[i].a, trk[j].tseg[k].pt[i].c, pc.bearing, DEG2M(pc.dist));
+            if (trk[j].mta)
+               fprintf(out, ", %.*s\n",
+                  (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
+            else
+               fprintf(out, "\n");
+            dist += pc.dist;
+         }
       fprintf(out, "# total distance = %.1f nm, %.1f m\n", dist * 60, DEG2M(dist));
       fprintf(out, "# ----- END TRACK -----\n");
    }
@@ -413,11 +421,12 @@ static void usage(const char *s)
 int main(int argc, char **argv)
 {
    fsh_file_header_t fhdr;
+   fsh_flob_header_t flobhdr;
    track_t *trk;
    route21_t *rte;
-   fsh_block_t *blk;
+   fsh_block_t *blk = NULL;
    ellipsoid_t el = WGS84;
-   int fd = 0, trk_cnt = 0, osm_out = 1, rte_cnt = 0;
+   int fd = 0, trk_cnt = 0, osm_out = 1, rte_cnt = 0, flob_cnt = 0;
    FILE *out = stdout;
    int c;
 
@@ -436,15 +445,28 @@ int main(int argc, char **argv)
      }
 
    check_endian();
-   fsh_read_file_header(fd, &fhdr);
-   fprintf(stderr, "# header values 0x%08x, 0x%04x\n", fhdr.a, fhdr.h & 0xffff);
+   init_ellipsoid(&el);
 
-   blk = fsh_block_read(fd);
+   if (fsh_read_file_header(fd, &fhdr) == -1)
+      fprintf(stderr, "# no RL90 header\n"), exit(EXIT_FAILURE);
+   fprintf(stderr, "# filer header values 0x%04x\n", fhdr.flobs);
+
+   while (fsh_read_flob_header(fd, &flobhdr) != -1)
+   {
+      fprintf(stderr, "# flob header values 0x%04x\n", flobhdr.h & 0xffff);
+      blk = fsh_block_read(fd, blk);
+
+      // try to read next FLOB
+      fprintf(stderr, "# looking for next flob %d\n", flob_cnt);
+      flob_cnt++;
+      if (flob_cnt >= fhdr.flobs >> 4)
+         break;
+      if (lseek(fd, flob_cnt * 0x10000 + sizeof(fhdr), SEEK_SET) == -1)
+         perror("fseek"), exit(EXIT_FAILURE);
+   }
 
    rte_cnt = fsh_route_decode(blk, &rte);
    trk_cnt = fsh_track_decode(blk, &trk);
-
-   init_ellipsoid(&el);
 
    if (osm_out)
    {

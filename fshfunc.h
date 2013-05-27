@@ -48,19 +48,27 @@
 
 /*** file structures of the ARCHIVE.FSH ***/
 
+// total length 28 bytes
 typedef struct fsh_file_header
 {
    char rl90[16];    //!< constant terminated string "RL90 FLASH FILE"
-   int32_t a;        //!< 1 or 8
+   int16_t flobs;    /*!< # of FLOBs * 16, 0x10 or 0x80 (i.e. file size in
+                          multiples of 64k) */
+   int16_t a;        //!< always 0
    int16_t b;        //!< always 0
    int16_t c;        //!< always 1
    int16_t d;        //!< always 1
    int16_t e;        //!< always 1
+} __attribute__ ((packed)) fsh_file_header_t;
+
+// total length 14 bytes
+typedef struct fsh_flob_header
+{
    char rflob[8];    //!< constant unterminated string "RAYFLOB1"
    int16_t f;        //!< always 1
    int16_t g;        //!< always 1
    int16_t h;        //!< 0xfffc or 0xfff0
-} __attribute__ ((packed)) fsh_file_header_t;
+} __attribute__ ((packed)) fsh_flob_header_t;
 
 // total length 14 bytes
 typedef struct fsh_track_point
@@ -79,7 +87,7 @@ typedef struct fsh_track_header
    int16_t b;        //!< unknown, always 0
 } __attribute__ ((packed)) fsh_track_header_t;
 
-// total length 66 bytes
+// total length 58 + guid_cnt * 8 bytes
 typedef struct fsh_track_meta
 {
    char a;           //!< always 0x01
@@ -87,7 +95,7 @@ typedef struct fsh_track_meta
    int16_t _cnt;     //!< same as cnt
    int16_t b;        //!< unknown, always 0
    int16_t c;        //!< unknown
-   int16_t d;        //!< unknown, always 0
+   int16_t d;        //!< unknown, always 0 (1 in 2nd block)
    int32_t north_start; //!< Northing of first track point
    int32_t east_start;  //!< Easting of first track point
    int16_t e;        //!< unknown, same value as 'a' from first track point
@@ -100,10 +108,9 @@ typedef struct fsh_track_meta
    int16_t h;        //!< unknown, always 0
    char i;           //!< unknown, 0, 1, or 5;
    char name[16];    //!< name of track, string not terminated
-   int16_t j;        //!< unknown, probably flags, always 0x0100
-   uint64_t guid;    /*!< unique ID of track which is the guid of the FSH block
-                       header of the track point list to which this track meta
-                       data belongs to. */
+   char j;           //!< unknown, always 0
+   uint8_t guid_cnt; //!< nr of guids following this header
+   uint64_t guid[];  //!< list of guids to this header belongs to
 } __attribute__ ((packed)) fsh_track_meta_t;
 
 // total length 14 bytes
@@ -187,15 +194,21 @@ typedef struct fsh_block
    void *data;
 } __attribute__ ((packed)) fsh_block_t; 
 
+typedef struct track_segment
+{
+   fsh_block_header_t *bhdr;
+   fsh_track_header_t *hdr;
+   fsh_track_point_t *pt;
+} track_segment_t;
+
 // memory structure for keeping a track
 typedef struct track
 {
    fsh_block_header_t *bhdr;
-   fsh_track_header_t *hdr;
    fsh_track_meta_t *mta;
-   fsh_track_point_t *pt;
+   track_segment_t *tseg;
 
-   int first_id, last_id;     //!< IDs, used for OSM output
+   int first_id, last_id;     //!< IDs, used for OSM output (FIXME: unclean impl.)
 } track_t;
 
 // mem struct for keeping a route
@@ -226,7 +239,8 @@ typedef struct ellipsoid
 
 char *guid_to_string(uint64_t );
 int fsh_read_file_header(int , fsh_file_header_t *);
-fsh_block_t *fsh_block_read(int );
+int fsh_read_flob_header(int , fsh_flob_header_t *);
+fsh_block_t *fsh_block_read(int , fsh_block_t *);
 int fsh_track_decode(const fsh_block_t *, track_t **);
 int fsh_route_decode(const fsh_block_t *, route21_t **);
 void fsh_free_block_data(fsh_block_t *);

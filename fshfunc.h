@@ -67,7 +67,7 @@ typedef struct fsh_flob_header
    char rflob[8];    //!< constant unterminated string "RAYFLOB1"
    int16_t f;        //!< always 1
    int16_t g;        //!< always 1
-   int16_t h;        //!< 0xfffc or 0xfff0
+   int16_t h;        //!< 0xfffe, 0xfffc, or 0xfff0
 } __attribute__ ((packed)) fsh_flob_header_t;
 
 // total length 14 bytes

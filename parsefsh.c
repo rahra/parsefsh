@@ -39,6 +39,9 @@
 #define DEG2M(x) ((x) * 60 * 1852)
 
 
+enum {FMT_CSV, FMT_OSM, FMT_GPX};
+
+
 struct coord
 {
    double lat, lon;
@@ -158,6 +161,22 @@ static void hexdump(const void *buf, int len)
 #endif
 
 
+static void gpx_start(FILE *out)
+{
+   fprintf(out, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+         "<gpx xmlns=\"http://www.topografix.com/GPX/1/1\" creator=\"parsefsh\" version=\"1.1\"\n"
+         "   xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+         "   xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd\">\n"
+         );
+}
+
+
+static void gpx_end(FILE *out)
+{
+   fprintf(out, "</gpx>\n");
+}
+
+
 static void osm_start(FILE *out)
 {
    fprintf(out, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<osm version=\"0.6\" generator=\"parsefsh\">\n");
@@ -239,6 +258,44 @@ int track_output_osm_ways(FILE *out, track_t *trk, int cnt)
          fprintf(out, "      <nd ref=\"%d\"/>\n", i);
       }
       fprintf(out, "   </way>\n");
+   }
+   return 0;
+}
+
+
+int track_output_gpx(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
+{
+   struct coord cd, cd0;
+   struct pcoord pc = {0, 0};
+   double dist;
+   int i, j, k, n;
+
+   for (j = 0; j < cnt; j++)
+   {
+      fprintf(out, " <trk>\n");
+      if (trk[j].mta != NULL)
+      {
+         fprintf(out, "  <name>%.*s</name>\n  <trkseg>\n",
+               (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
+      }
+
+      for (k = 0, n = 0; k < trk[j].mta->guid_cnt; k++)
+         for (i = 0, dist = 0; i < trk[j].tseg[k].hdr->cnt; i++, n++)
+         {
+            if (trk[j].tseg[k].pt[i].c == -1)
+               continue;
+
+            cd0 = cd;
+            raycoord_norm(trk[j].tseg[k].pt[i].north, trk[j].tseg[k].pt[i].east, &cd.lat, &cd.lon);
+            cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
+
+            if (i)
+               pc = coord_diff(&cd0, &cd);
+
+            fprintf(out, "   <trkpt lat=\"%.8f\" lon=\"%.8f\">\n    <ele>%.1f</ele>\n   </trkpt>\n",
+                  cd.lat, cd.lon, (double) trk[j].tseg[k].pt[i].depth / -100);
+         }
+      fprintf(out, "  </trkseg>\n </trk>\n");
    }
    return 0;
 }
@@ -412,8 +469,9 @@ static void usage(const char *s)
 {
    printf(
          "usage: %s [OPTIONS]\n"
-         "   -h ............. This help.\n"
-         "   -c ............. Output CSV format instead of OSM.\n",
+         "   -c ............. Output CSV format instead of OSM.\n"
+         "   -f <format> .... Define output format. Available formats: csv, gpx, osm.\n"
+         "   -h ............. This help.\n",
          s);
 }
 
@@ -426,18 +484,29 @@ int main(int argc, char **argv)
    route21_t *rte;
    fsh_block_t *blk = NULL;
    ellipsoid_t el = WGS84;
-   int fd = 0, trk_cnt = 0, osm_out = 1, rte_cnt = 0, flob_cnt = 0;
+   int fd = 0, trk_cnt = 0, fmt_out = FMT_OSM, rte_cnt = 0, flob_cnt = 0;
    FILE *out = stdout;
    int c;
 
    fprintf(stderr, "# ARCHIVE.FSH decoder (c) 2013 by Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>\n");
-   while ((c = getopt(argc, argv, "ch")) != -1)
+   while ((c = getopt(argc, argv, "cf:h")) != -1)
       switch (c)
       {
          case 'c':
-            osm_out = 0;
+            fmt_out = FMT_CSV;
             break;
  
+         case 'f':
+            if (!strcasecmp(optarg, "csv"))
+               fmt_out = FMT_CSV;
+            else if (!strcasecmp(optarg, "osm"))
+               fmt_out = FMT_OSM;
+            else if (!strcasecmp(optarg, "gpx"))
+               fmt_out = FMT_GPX;
+            else
+               fprintf(stderr, "# unknown format '%s', defaults to OSM\n", optarg);
+            break;
+
          case 'h':
             usage(argv[0]);
             return 0;
@@ -468,19 +537,28 @@ int main(int argc, char **argv)
    rte_cnt = fsh_route_decode(blk, &rte);
    trk_cnt = fsh_track_decode(blk, &trk);
 
-   if (osm_out)
+   switch (fmt_out)
    {
-      osm_start(out);
-      track_output_osm_nodes(out, trk, trk_cnt, &el);
-      route_output_osm_nodes(out, rte, rte_cnt, &el);
-      track_output_osm_ways(out, trk, trk_cnt);
-      route_output_osm_ways(out, rte, rte_cnt);
-      osm_end(out);
-   }
-   else
-   {
-      track_output(out, trk, trk_cnt, &el);
-      route_output(out, rte, rte_cnt, &el);
+      default:
+      case FMT_OSM:
+         osm_start(out);
+         track_output_osm_nodes(out, trk, trk_cnt, &el);
+         route_output_osm_nodes(out, rte, rte_cnt, &el);
+         track_output_osm_ways(out, trk, trk_cnt);
+         route_output_osm_ways(out, rte, rte_cnt);
+         osm_end(out);
+         break;
+
+      case FMT_CSV:
+         track_output(out, trk, trk_cnt, &el);
+         route_output(out, rte, rte_cnt, &el);
+         break;
+
+      case FMT_GPX:
+         gpx_start(out);
+         track_output_gpx(out, trk, trk_cnt, &el);
+         gpx_end(out);
+         break;
    }
 
    free(rte);

@@ -31,6 +31,9 @@
 #include "fshfunc.h"
 
 
+void vlog(const char*, ...) __attribute__((format (printf, 1, 2)));
+
+
 char *guid_to_string(uint64_t guid)
 {
    static char buf[32];
@@ -123,19 +126,19 @@ fsh_block_t *fsh_block_read(int fd, fsh_block_t *blk)
       if ((len = read(fd, &blk[blk_cnt].hdr, sizeof(blk[blk_cnt].hdr))) == -1)
          perror("read"), exit(EXIT_FAILURE);
 
-      fprintf(stderr, "# offset = $%08lx, block type = 0x%02x, len = %d, guid %s\n",
+      vlog("offset = $%08lx, block type = 0x%02x, len = %d, guid %s\n",
             pos + (long) off, blk[blk_cnt].hdr.type, blk[blk_cnt].hdr.len, guid_to_string(blk[blk_cnt].hdr.guid));
       pos += len;
 
       if (len < (int) sizeof(blk[blk_cnt].hdr))
       {
-         fprintf(stderr, "# header truncated, read %d of %d\n", len, (int) sizeof(blk[blk_cnt].hdr));
+         vlog("header truncated, read %d of %d\n", len, (int) sizeof(blk[blk_cnt].hdr));
          blk[blk_cnt].hdr.type = 0xffff;
       }
 
       if (blk[blk_cnt].hdr.type == 0xffff)
       {
-            fprintf(stderr, "# end\n");
+            vlog("end\n");
             break;
       }
 
@@ -149,7 +152,7 @@ fsh_block_t *fsh_block_read(int fd, fsh_block_t *blk)
 
       if (len < rlen)
       {
-         fprintf(stderr, "# block data truncated, read %d of %d\n", len, rlen);
+         vlog("block data truncated, read %d of %d\n", len, rlen);
          // clear unfilled partition of block
          memset(blk[blk_cnt].data + len, 0, rlen - len);
          break;
@@ -165,7 +168,7 @@ static void fsh_tseg_decode0(const fsh_block_t *blk, track_t *trk)
 {
    int i;
 
-   fprintf(stderr, "# decoding tracks\n");
+   vlog("decoding tracks\n");
    for (; blk->hdr.type != 0xffff; blk++)
       if (blk->hdr.type == 0x0d)
          for (i = 0; i < trk->mta->guid_cnt; i++)
@@ -196,13 +199,13 @@ static int fsh_track_decode0(const fsh_block_t *blk, track_t **trk)
 {
    int trk_cnt = 0;
 
-   fprintf(stderr, "# decoding track metas\n");
+   vlog("decoding track metas\n");
    for (*trk = NULL; blk->hdr.type != 0xffff; blk++)
    {
-      fprintf(stderr, "# decoding 0x%02x\n", blk->hdr.type);
+      vlog("decoding 0x%02x\n", blk->hdr.type);
       if (blk->hdr.type == 0x0e)
       {
-         fprintf(stderr, "# track meta\n");
+         vlog("track meta\n");
 
          if ((*trk = realloc(*trk, sizeof(**trk) * (trk_cnt + 1))) == NULL)
             perror("realloc"), exit(EXIT_FAILURE);
@@ -243,14 +246,14 @@ int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
 {
    int rte_cnt = 0;
 
-   fprintf(stderr, "# decoding routes\n");
+   vlog("decoding routes\n");
    for (*rte = NULL; blk->hdr.type != 0xffff; blk++)
    {
-      fprintf(stderr, "# decoding 0x%02x\n", blk->hdr.type);
+      vlog("decoding 0x%02x\n", blk->hdr.type);
       switch (blk->hdr.type)
       {
          case 0x21:
-            fprintf(stderr, "# route21\n");
+            vlog("route21\n");
             if ((*rte = realloc(*rte, sizeof(**rte) * (rte_cnt + 1))) == NULL)
                perror("realloc"), exit(EXIT_FAILURE);
 

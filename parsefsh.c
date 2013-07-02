@@ -24,11 +24,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #include "fshfunc.h"
 
@@ -51,6 +53,33 @@ struct pcoord
 {
    double bearing, dist;
 };
+
+
+static FILE *logout_;
+
+
+static void __attribute__((constructor)) init_log_output(void)
+{
+   logout_ = stderr;
+}
+
+
+int vlog(const char *fmt, ...)
+{
+   va_list ap;
+   int ret;
+
+   // safety check
+   if (logout_ == NULL || fmt == NULL)
+      return 0;
+
+   fputs("# ", logout_);
+   va_start(ap, fmt);
+   ret = vfprintf(logout_, fmt, ap);
+   va_end(ap);
+
+   return ret;
+}
 
 
 /*! This function derives the ellipsoid parameters from the semi-major and
@@ -471,7 +500,8 @@ static void usage(const char *s)
          "usage: %s [OPTIONS]\n"
          "   -c ............. Output CSV format instead of OSM.\n"
          "   -f <format> .... Define output format. Available formats: csv, gpx, osm.\n"
-         "   -h ............. This help.\n",
+         "   -h ............. This help.\n"
+         "   -q ............. Quiet. No informational output.\n",
          s);
 }
 
@@ -488,8 +518,7 @@ int main(int argc, char **argv)
    FILE *out = stdout;
    int c;
 
-   fprintf(stderr, "# ARCHIVE.FSH decoder (c) 2013 by Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>\n");
-   while ((c = getopt(argc, argv, "cf:h")) != -1)
+   while ((c = getopt(argc, argv, "cf:hq")) != -1)
       switch (c)
       {
          case 'c':
@@ -511,22 +540,31 @@ int main(int argc, char **argv)
             usage(argv[0]);
             return 0;
 
+         case 'q':
+            if ((logout_ = fopen("/dev/null", "w")) == NULL)
+            {
+               logout_ = stderr;
+               vlog("warning: failed to open /dev/null: %s\n", strerror(errno));
+            }
+            break;
      }
+
+   vlog("ARCHIVE.FSH decoder (c) 2013 by Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>\n");
 
    check_endian();
    init_ellipsoid(&el);
 
    if (fsh_read_file_header(fd, &fhdr) == -1)
       fprintf(stderr, "# no RL90 header\n"), exit(EXIT_FAILURE);
-   fprintf(stderr, "# filer header values 0x%04x\n", fhdr.flobs);
+   vlog("filer header values 0x%04x\n", fhdr.flobs);
 
    while (fsh_read_flob_header(fd, &flobhdr) != -1)
    {
-      fprintf(stderr, "# flob header values 0x%04x\n", flobhdr.h & 0xffff);
+      vlog("flob header values 0x%04x\n", flobhdr.h & 0xffff);
       blk = fsh_block_read(fd, blk);
 
       // try to read next FLOB
-      fprintf(stderr, "# looking for next flob %d\n", flob_cnt);
+      vlog("looking for next flob %d\n", flob_cnt);
       flob_cnt++;
       if (flob_cnt >= fhdr.flobs >> 4)
          break;

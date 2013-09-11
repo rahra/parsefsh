@@ -26,21 +26,39 @@
 #include <unistd.h>
 #include <string.h>
 #include <inttypes.h>
+#include <time.h>
 
 
 #include "fshfunc.h"
 
 
+#ifdef HAVE_VLOG
 void vlog(const char*, ...) __attribute__((format (printf, 1, 2)));
-
+#else
+#define vlog(x...) fprintf(stderr, ## x)
+#endif
 
 char *guid_to_string(uint64_t guid)
 {
    static char buf[32];
 
-   snprintf(buf, sizeof(buf),  "%"PRIu64"d-%"PRIu64"d-%"PRIu64"d-%"PRIu64"d",
+   snprintf(buf, sizeof(buf),  "%"PRIu64"-%"PRIu64"-%"PRIu64"-%"PRIu64,
          guid >> 48, (guid >> 32) & 0xffff, (guid >> 16) & 0xffff, guid & 0xffff);
    return buf;
+}
+
+
+/*! This function converts an FSH timestamp into string representation.
+ * @param ts Pointer to FSH timestamp.
+ * @param buf Pointer to buffer which will receive the string.
+ * @paran len Length of buffer.
+ * @return Returns the number of bytes placed into buf without the trailing \0.
+ */
+int fsh_timetostr(const fsh_timestamp_t *ts, char *buf, int len)
+{
+   time_t t = (time_t) ts->date * 3600 * 24 + ts->timeofday;
+   struct tm *tm = gmtime(&t);
+   return strftime(buf, len, "%Y-%m-%dT%H:%M:%SZ", tm);
 }
 
 
@@ -263,7 +281,7 @@ int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
             (*rte)[rte_cnt].hdr2 = (struct fsh_hdr2*) ((*rte)[rte_cnt].guid + (*rte)[rte_cnt].hdr->guid_cnt);
             (*rte)[rte_cnt].pt = (struct fsh_pt*) ((*rte)[rte_cnt].hdr2 + 1);
             (*rte)[rte_cnt].hdr3 = (struct fsh_hdr3*) ((*rte)[rte_cnt].pt + (*rte)[rte_cnt].hdr->guid_cnt);
-            (*rte)[rte_cnt].wpt = (fsh_wpt_t*) ((*rte)[rte_cnt].hdr3 + 1);
+            (*rte)[rte_cnt].wpt = (fsh_route_wpt_t*) ((*rte)[rte_cnt].hdr3 + 1);
 
             rte_cnt++;
             break;

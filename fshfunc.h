@@ -18,6 +18,11 @@
 /*! This file contains all data structurs used to parse the ARCHIVE.FSH.
  *
  *  @author Bernhard R. Fischer
+ *
+ *  ACKNOLEDGEMENTS
+ *  Thanks to KHB for discovering depth, temperature, and timestamp fields in
+ *  the waypoint structures!
+ *  Thanks to Robbilard for the group22 header!
  */
 
 #ifndef FSHFUNC_H
@@ -74,7 +79,7 @@ typedef struct fsh_flob_header
 typedef struct fsh_track_point
 {
    int32_t north, east; //!< prescaled (FSH_LAT_SCALE) northing and easting (ellipsoid Mercator)
-   int16_t a;           //!< unknown
+   uint16_t tempr;      //!< temperature in Kelvin * 100
    int16_t depth;       //!< depth in cm
    int16_t c;           //!< unknown, always 0
 } __attribute__ ((packed)) fsh_track_point_t;
@@ -87,6 +92,13 @@ typedef struct fsh_track_header
    int16_t b;        //!< unknown, always 0
 } __attribute__ ((packed)) fsh_track_header_t;
 
+// timestamp used in FSH data, length 6 bytes
+typedef struct fsh_timestamp
+{
+   uint32_t timeofday;  //!< time of day in seconds
+   uint16_t date;       //!< days since 1.1.1970
+} __attribute__ ((packed)) fsh_timestamp_t;
+
 // total length 58 + guid_cnt * 8 bytes
 typedef struct fsh_track_meta
 {
@@ -98,14 +110,12 @@ typedef struct fsh_track_meta
    int16_t d;        //!< unknown, always 0 (1 in 2nd block)
    int32_t north_start; //!< Northing of first track point
    int32_t east_start;  //!< Easting of first track point
-   int16_t e;        //!< unknown, same value as 'a' from first track point
-   int16_t e1;       //!< unknown
-   int16_t f;        //!< unknown, always 0
+   uint16_t tempr_start;//!< temperature of first track point
+   int32_t depth_start; //!< depth of first track point
    int32_t north_end;   //!< Northing of last track point
    int32_t east_end;    //!< Easting of last track point
-   int16_t g;        //!< unknown, same as 'a' from last track point
-   int16_t g1;       //!< unknown
-   int16_t h;        //!< unknown, always 0
+   uint16_t tempr_end;  //!< temperature last track point
+   int32_t depth_end;   //!< depth of last track point
    char i;           //!< unknown, 0, 1, or 5;
    char name[16];    //!< name of track, string not terminated
    char j;           //!< unknown, always 0
@@ -119,7 +129,7 @@ typedef struct fsh_block_header
    uint16_t len;     //!< length of block in bytes excluding this header
    uint64_t guid;    //!< unique ID of block
    uint16_t type;    //!< type of block
-   uint16_t unknown;
+   uint16_t unknown; //!< always 0x4000 ?
 } __attribute__ ((packed)) fsh_block_header_t;
 
 // route type 0x21
@@ -140,24 +150,46 @@ typedef struct fsh_route22_header
 
 } __attribute__ ((packed)) fsh_route22_header_t;
 
-// waypoint length 56 bytes (without var. length name)
-typedef struct fsh_wpt
+// common waypoint data, length 40 bytes + name_len + cmt_len
+typedef struct fsh_wpt_data
 {
-   int64_t guid;
-   int32_t lat, lon;    //!< latitude/longitude * 1E7
    int32_t north, east; //!< prescaled ellipsoid Mercator northing and easting
    char d[12];         //!< 12x \0
    char sym;           //!< probably symbol
-   int16_t e;          //!< unknown, always -1
-   int32_t f;          //!< unknown, always -1
-   int32_t g;          //!< unknown
-   uint16_t h;         //!< unknown
+   
+   uint16_t tempr;     //!< temperature in Kelvin * 100
+   int32_t depth;      //!< depth in cm
+   fsh_timestamp_t ts; //!< timestamp
+
    char i;             //!< unknown, always 0
-   int16_t name_len;   //!< length of name array
+   
+   char name_len;      //!< length of name array
+   char cmt_len;       //!< length of comment
+   
    int32_t j;          //!< unknown, always 0
-   char name[];        //!< unterminated wpt name
+   char txt_data[];    /*!< this is a combined string field. First the name of
+                         the waypoint of 'name_len' number of characters
+                         directly followed by a comment of 'cmt_len'
+                         characters. Thus, the comment starts at 'txt_data' +
+                         'name_len'. */
+#define NAME(x) ((x).txt_data)
+#define COMMENT(x) ((x).txt_data + (x).name_len)
+} __attribute__ ((packed)) fsh_wpt_data_t;
+
+// waypoint as used int block type 0x22, 8 bytes + sizeof fsh_wpt_data_t
+typedef struct fsh_wpt
+{
+   int32_t lat, lon;   //!< latitude/longitude * 1E7
+   fsh_wpt_data_t wpd;
 } __attribute__ ((packed)) fsh_wpt_t;
 
+// route (0x21) waypoint is simply a GUID followed by the waypoint data, length
+// is 8 bytes + sizeof fsh_wpt = 56 bytes + name_len + cmt_len
+typedef struct fsh_route_wpt
+{
+  int64_t guid;    //!< the guid of the waypoint
+  fsh_wpt_t wpt;   //!< rest of the waypoint data from above
+} __attribute__ ((packed)) fsh_route_wpt_t;
 
 struct fsh_hdr2
 {
@@ -171,11 +203,19 @@ struct fsh_hdr2
 
 struct fsh_pt
 {
+#if 1
    int16_t a;
    int16_t b;        //!< depth?
    int16_t c;        //!< always 0
    int16_t d;        //!< in the first element same value like b
    int16_t sym;      //!< seems to be the symbol
+#else
+   // looks also like this
+   int16_t a;
+   int32_t b;
+   int32_t c;        //!< value is very similar to b
+#endif
+
 } __attribute__ ((packed));
 
 struct fsh_hdr3
@@ -183,6 +223,21 @@ struct fsh_hdr3
    int16_t wpt_cnt;  //!< number of waypoints
    int16_t a;        //!< always 0
 } __attribute__ ((packed));
+
+// group type 0x22
+typedef struct fsh_group22_header
+{
+  int16_t name_len; //!< length of name of route
+  int16_t guid_cnt; //!< number of GUIDs in the list following this header
+  char name[];      //!< unterminated name string of length name_len
+} __attribute__ ((packed)) fsh_group22_header_t;
+
+// waypoint 0x01, length 8 bytes  + sizeof wpt_data_t
+typedef struct fsh_wpt01
+{
+   int64_t guid;
+   fsh_wpt_data_t wpd;
+} __attribute__ ((packed)) fsh_wpt01_t;
 
 
 /*** memory structures used by parsefsh ***/
@@ -222,7 +277,7 @@ typedef struct route21
 //   int pt_cnt;
    struct fsh_pt *pt;
    struct fsh_hdr3 *hdr3;
-   fsh_wpt_t *wpt;         //!< pointer to the first waypoint. Note, it does
+   fsh_route_wpt_t *wpt;   //!< pointer to the first waypoint. Note, it does
                            //!< not increase linearly because fsh_wpt_t
                            //!< contains a variable length array if name_len length.
 
@@ -244,6 +299,7 @@ fsh_block_t *fsh_block_read(int , fsh_block_t *);
 int fsh_track_decode(const fsh_block_t *, track_t **);
 int fsh_route_decode(const fsh_block_t *, route21_t **);
 void fsh_free_block_data(fsh_block_t *);
+int fsh_timetostr(const fsh_timestamp_t *, char *, int );
 
 #endif
 

@@ -39,6 +39,9 @@
 #define DEG2RAD(x) ((x) * DEGSCALE)
 #define RAD2DEG(x) ((x) / DEGSCALE)
 #define DEG2M(x) ((x) * 60 * 1852)
+#define CELSIUS(x) ((double) (x) / 100.0 - 273.15)
+
+#define TBUFLEN 24
 
 
 enum {FMT_CSV, FMT_OSM, FMT_GPX};
@@ -225,18 +228,44 @@ static int get_id(void)
 }
 
 
- #define TBUFLEN 24
+void output_osm_nodes(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int id, const char *wpt_type)
+{
+   char tbuf[TBUFLEN];
+   struct coord cd;
+
+   raycoord_norm(wpd->north, wpd->east, &cd.lat, &cd.lon);
+   cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
+
+   fsh_timetostr(&wpd->ts, tbuf, sizeof(tbuf));
+
+   fprintf(out,
+            "   <node id=\"%d\" lat=\"%.7f\" lon=\"%.7f\" timestamp=\"%s\">\n"
+            "      <tag k=\"fsh:type\" v=\"%s\"/>\n"
+            "      <tag k=\"name\" v=\"%.*s\"/>\n"
+            "      <tag k=\"description\" v=\"%.*s\"/>\n",
+            id, cd.lat, cd.lon, tbuf, wpt_type, wpd->name_len, wpd->txt_data, wpd->cmt_len, wpd->txt_data + wpd->name_len);
+
+   if (wpd->depth != -1)
+      fprintf(out, 
+            "      <tag k=\"seamark:sounding\" v=\"%.1f\"/>\n"
+            "      <tag k=\"seamark:type\" v=\"sounding\"/>\n",
+            (double) wpd->depth / 100.0);
+   if (wpd->tempr != 0xffff)
+      fprintf(out, 
+           "      <tag k=\"temperature\" v=\"%.1f\"/>\n",
+           CELSIUS(wpd->tempr));
+
+   fprintf(out, "   </node>\n");
+}
+
+
 int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *el)
 {
-   char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
-   double lat, lon;
-   struct tm *tm;
-   time_t t;
+   fsh_wpt_data_t wpd;
    int i, j, k;
 
-   time(&t);
-   if ((tm = gmtime(&t)) != NULL)
-      strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", tm);
+   memset(&wpd, 0, sizeof(wpd));
+   wpd.tempr = 0xffff;
 
    for (j = 0; j < cnt; j++)
    {
@@ -247,16 +276,10 @@ int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *
             if (trk[j].tseg[k].pt[i].c == -1)
                continue;
 
-            raycoord_norm(trk[j].tseg[k].pt[i].north, trk[j].tseg[k].pt[i].east, &lat, &lon);
-            lat = phi_iterate_merc(el, lat) * 180 / M_PI;
-
-            fprintf(out,
-               "   <node id=\"%d\" lat=\"%.8f\" lon=\"%.8f\" version=\"1\" timestamp=\"%s\">\n"
-               "      <tag k=\"seamark:type\" v=\"sounding\"/>\n"
-               "      <tag k=\"seamark:sounding\" v=\"%.1f\"/>\n"
-               "      <tag k=\"fsh:id\" v=\"%d:%d\"/>\n"
-               "   </node>\n",
-               get_id() + 1, lat, lon, ts, (double) trk[j].tseg[k].pt[i].depth / 100, j, i);
+            wpd.north = trk[j].tseg[k].pt[i].north;
+            wpd.east = trk[j].tseg[k].pt[i].east;
+            wpd.depth = trk[j].tseg[k].pt[i].depth;
+            output_osm_nodes(out, &wpd, el, get_id() + 1, "trackpoint");
          }
       trk[j].last_id = get_id() + 2;
    }
@@ -295,8 +318,6 @@ int track_output_osm_ways(FILE *out, track_t *trk, int cnt)
 int track_output_gpx(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 {
    struct coord cd, cd0;
-   struct pcoord pc = {0, 0};
-   double dist;
    int i, j, k, n;
 
    for (j = 0; j < cnt; j++)
@@ -309,7 +330,7 @@ int track_output_gpx(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *
       }
 
       for (k = 0, n = 0; k < trk[j].mta->guid_cnt; k++)
-         for (i = 0, dist = 0; i < trk[j].tseg[k].hdr->cnt; i++, n++)
+         for (i = 0; i < trk[j].tseg[k].hdr->cnt; i++, n++)
          {
             if (trk[j].tseg[k].pt[i].c == -1)
                continue;
@@ -319,7 +340,7 @@ int track_output_gpx(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *
             cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
 
             if (i)
-               pc = coord_diff(&cd0, &cd);
+               coord_diff(&cd0, &cd);
 
             fprintf(out, "   <trkpt lat=\"%.8f\" lon=\"%.8f\">\n    <ele>%.1f</ele>\n   </trkpt>\n",
                   cd.lat, cd.lon, (double) trk[j].tseg[k].pt[i].depth / -100);
@@ -342,16 +363,18 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
       fprintf(out, "# ----- BEGIN TRACK -----\n");
       if (trk[j].mta != NULL)
       {
-         fprintf(out, "# name = '%.*s', e = $%04x, g = $%04x, e1 = $%04x, g1 = $%04x, guid_cnt = %d\n",
+         fprintf(out, "# name = '%.*s', tempr_start = %.1f, depth_start = %d, tempr_end = %.1f, depth_end = %d, guid_cnt = %d\n",
                (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "",
-               trk[j].mta->e, trk[j].mta->g, trk[j].mta->e1, trk[j].mta->g1, trk[j].mta->guid_cnt);
+               CELSIUS(trk[j].mta->tempr_start), trk[j].mta->depth_start,
+               CELSIUS(trk[j].mta->tempr_end), trk[j].mta->depth_end,
+               trk[j].mta->guid_cnt);
          for (i = 0; i < trk[j].mta->guid_cnt; i++)
             fprintf(out, "# guid[%d] = %s\n", i, guid_to_string(trk[j].mta->guid[i]));
       }
       else
          fprintf(out, "# no track meta data\n");
 
-      fprintf(out, "# CNT, NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], A, A [hex], C, bearing, distance [m], TRACKNAME\n");
+      fprintf(out, "# CNT, NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], TEMPR [C], C, bearing, distance [m], TRACKNAME\n");
 
       for (k = 0, n = 0; k < trk[j].mta->guid_cnt; k++)
          for (i = 0, dist = 0; i < trk[j].tseg[k].hdr->cnt; i++, n++)
@@ -366,10 +389,10 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
             if (i)
                pc = coord_diff(&cd0, &cd);
 
-            fprintf(out, "%d, %d, %d, %d, %.8f, %.8f, %d, %d, $%04x, %d, %.1f, %.1f",
+            fprintf(out, "%d, %d, %d, %d, %.8f, %.8f, %d, %.1f, %d, %.1f, %.1f",
                   n, i, trk[j].tseg[k].pt[i].north, trk[j].tseg[k].pt[i].east,
-                  cd.lat, cd.lon, trk[j].tseg[k].pt[i].depth, trk[j].tseg[k].pt[i].a,
-                  trk[j].tseg[k].pt[i].a, trk[j].tseg[k].pt[i].c, pc.bearing, DEG2M(pc.dist));
+                  cd.lat, cd.lon, trk[j].tseg[k].pt[i].depth, CELSIUS(trk[j].tseg[k].pt[i].tempr),
+                  trk[j].tseg[k].pt[i].c, pc.bearing, DEG2M(pc.dist));
             if (trk[j].mta)
                fprintf(out, ", %.*s\n",
                   (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
@@ -386,32 +409,16 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 
 int route_output_osm_nodes(FILE *out, route21_t *rte, int cnt, const ellipsoid_t *el)
 {
-   char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
-   struct coord cd;
-   fsh_wpt_t *wpt;
-   struct tm *tm;
-   time_t t;
+   fsh_route_wpt_t *wpt;
    int i, j;
-
-   time(&t);
-   if ((tm = gmtime(&t)) != NULL)
-      strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", tm);
 
    for (j = 0; j < cnt; j++)
    {
       rte[j].first_id = get_id();
       for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
       {
-         raycoord_norm(wpt->north, wpt->east, &cd.lat, &cd.lon);
-         cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
-
-         fprintf(out,
-               "   <node id=\"%d\" lat=\"%.7f\" lon=\"%.7f\" timestamp=\"%s\">\n"
-               "      <tag k=\"name\" v=\"%.*s\"/>\n"
-               "   </node>\n",
-               //get_id() + 1, wpt->lat / 1E7, wpt->lon / 1E7, ts, wpt->name_len, wpt->name);
-               get_id() + 1, cd.lat, cd.lon, ts, wpt->name_len, wpt->name);
-         wpt = (fsh_wpt_t*) ((char*) wpt + wpt->name_len + sizeof(*wpt));
+         output_osm_nodes(out, &wpt->wpt.wpd, el, get_id() + 1, "routepoint");
+         wpt = (fsh_route_wpt_t*) ((char*) wpt + wpt->wpt.wpd.name_len + wpt->wpt.wpd.cmt_len + sizeof(*wpt));
       }
       rte[j].last_id = get_id() + 2;
    }
@@ -448,7 +455,8 @@ int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
 int route_output(FILE *out, const route21_t *rte, int cnt, const ellipsoid_t *el)
 {
    struct coord cd;
-   fsh_wpt_t *wpt;
+   fsh_route_wpt_t *wpt;
+   char tbuf[64];
    int i, j;
 
    for (j = 0; j < cnt; j++)
@@ -471,14 +479,130 @@ int route_output(FILE *out, const route21_t *rte, int cnt, const ellipsoid_t *el
 
       for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
       {
-         raycoord_norm(wpt->north, wpt->east, &cd.lat, &cd.lon);
+         raycoord_norm(wpt->wpt.wpd.north, wpt->wpt.wpd.east, &cd.lat, &cd.lon);
          cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
  
-         fprintf(out, "# %s, %.7f, %.7f, %.7f, %.7f, %d, %d, %d, %.*s\n", guid_to_string(wpt->guid),
-               wpt->lat / 1E7, wpt->lon / 1E7, cd.lat, cd.lon, wpt->sym, wpt->g, wpt->h, wpt->name_len, wpt->name);
+         fsh_timetostr(&wpt->wpt.wpd.ts, tbuf, sizeof(tbuf));
+         fprintf(out, "# %s, %.7f, %.7f, %.7f, %.7f, %d, %.*s, %.*s, %s\n", guid_to_string(wpt->guid),
+               wpt->wpt.lat / 1E7, wpt->wpt.lon / 1E7, cd.lat, cd.lon, wpt->wpt.wpd.sym,
+               wpt->wpt.wpd.name_len, wpt->wpt.wpd.txt_data, wpt->wpt.wpd.cmt_len, wpt->wpt.wpd.txt_data + wpt->wpt.wpd.name_len, tbuf);
 
-         wpt = (fsh_wpt_t*) ((char*) wpt + wpt->name_len + sizeof(*wpt));
+         wpt = (fsh_route_wpt_t*) ((char*) wpt + wpt->wpt.wpd.name_len + wpt->wpt.wpd.cmt_len + sizeof(*wpt));
       }
+   }
+   return 0;
+}
+
+
+int wpt_01_output(FILE *out, const fsh_block_t *blk)
+{
+   fsh_wpt01_t *wpt;
+   char tbuf[64];
+
+   fprintf(out, "# ----- BEGIN WAYPOINTS TYPE 0x01 -----\n"
+                "# GUID, LAT, LON, SYM, TEMPR [C], DEPTH [cm], NAME, COMMENT, TIMESTAMP\n");
+   for (; blk->hdr.type != 0xffff; blk++)
+   {
+      if (blk->hdr.type != 0x01)
+         continue;
+
+      wpt = blk->data;
+      fsh_timetostr(&wpt->wpd.ts, tbuf, sizeof(tbuf));
+      fprintf(out, "%s, %.7f, %.7f, %d, %.1f, %d, %.*s, %.*s, %s\n", guid_to_string(wpt->guid),
+            0.0, 0.0,
+               wpt->wpd.sym, CELSIUS(wpt->wpd.tempr), wpt->wpd.depth,
+               wpt->wpd.name_len, wpt->wpd.txt_data, wpt->wpd.cmt_len, wpt->wpd.txt_data + wpt->wpd.name_len, tbuf);
+   }
+   fprintf(out, "# ----- END WAYPOINTS TYPE 0x01 -----\n");
+   return 0;
+}
+
+
+int wpt_01_output_osm_nodes(FILE *out, const fsh_block_t *blk, const ellipsoid_t *el)
+{
+   fsh_wpt01_t *wpt;
+
+   for (; blk->hdr.type != 0xffff; blk++)
+   {
+      if (blk->hdr.type != 0x01)
+         continue;
+
+      wpt = blk->data;
+      output_osm_nodes(out, &wpt->wpd, el, get_id(), "waypoint");
+   }
+   return 0;
+}
+
+
+static void output_gpx_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el)
+{
+   struct coord cd;
+   char tbuf[64];
+
+   raycoord_norm(wpd->north, wpd->east, &cd.lat, &cd.lon);
+   cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
+
+   fsh_timetostr(&wpd->ts, tbuf, sizeof(tbuf));
+
+   fprintf(out,
+            "   <wpt lat=\"%.7f\" lon=\"%.7f\">\n"
+            "      <time>%s</time>\n"
+            "      <name>%.*s</name>\n"
+            "      <cmt>%.*s</cmt>\n",
+            //get_id() + 1, wpt->lat / 1E7, wpt->lon / 1E7, ts, wpt->name_len, wpt->name);
+            cd.lat, cd.lon, tbuf, wpd->name_len, wpd->txt_data, wpd->cmt_len, wpd->txt_data + wpd->name_len);
+
+   if (wpd->depth != -1)
+      fprintf(out, 
+            "      <ele>%.1f</ele>\n",
+            (double) wpd->depth / -100.0);
+#if 0
+   if (wpt->wpd.tempr != 0xffff)
+      fprintf(out, 
+           "      <tag k=\"temperature\" v=\"%.1f\"/>\n",
+           CELSIUS(wpt->wpd.tempr));
+#endif
+   fprintf(out, "   </wpt>\n");
+}
+
+
+int route_output_gpx_ways(FILE *out, route21_t *rte, int cnt, const ellipsoid_t *el)
+{
+   fsh_route_wpt_t *wpt;
+   int i;
+
+   for (int j = 0; j < cnt; j++)
+   {
+      fprintf(out,
+            "   <rte>\n"
+            "      <name>%.*s</name>\n",
+            rte[j].hdr->name_len, rte[j].hdr->name);
+
+      for (wpt = rte[j].wpt, i = 0; i < rte[j].hdr3->wpt_cnt; i++)
+      {
+         output_gpx_wpt(out, &wpt->wpt.wpd, el);
+         wpt = (fsh_route_wpt_t*) ((char*) wpt + wpt->wpt.wpd.name_len + wpt->wpt.wpd.cmt_len + sizeof(*wpt));
+      }
+
+      fprintf(out,
+            "   </rte>\n");
+   }
+   return 0;
+}
+
+
+int wpt_01_output_gpx_nodes(FILE *out, const fsh_block_t *blk, const ellipsoid_t *el)
+
+{
+   fsh_wpt01_t *wpt;
+
+   for (; blk->hdr.type != 0xffff; blk++)
+   {
+      if (blk->hdr.type != 0x01)
+         continue;
+
+      wpt = blk->data;
+      output_gpx_wpt(out, &wpt->wpd, el);
    }
    return 0;
 }
@@ -580,6 +704,7 @@ int main(int argc, char **argv)
       default:
       case FMT_OSM:
          osm_start(out);
+         wpt_01_output_osm_nodes(out, blk, &el);
          track_output_osm_nodes(out, trk, trk_cnt, &el);
          route_output_osm_nodes(out, rte, rte_cnt, &el);
          track_output_osm_ways(out, trk, trk_cnt);
@@ -588,13 +713,16 @@ int main(int argc, char **argv)
          break;
 
       case FMT_CSV:
+         wpt_01_output(out, blk);
          track_output(out, trk, trk_cnt, &el);
          route_output(out, rte, rte_cnt, &el);
          break;
 
       case FMT_GPX:
          gpx_start(out);
+         wpt_01_output_gpx_nodes(out, blk, &el);
          track_output_gpx(out, trk, trk_cnt, &el);
+         route_output_gpx_ways(out, rte, rte_cnt, &el);
          gpx_end(out);
          break;
    }

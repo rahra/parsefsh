@@ -682,17 +682,18 @@ int main(int argc, char **argv)
       fprintf(stderr, "# no RL90 header\n"), exit(EXIT_FAILURE);
    vlog("filer header values 0x%04x\n", fhdr.flobs);
 
+   vlog("reading flob %d\n", flob_cnt);
    while (fsh_read_flob_header(fd, &flobhdr) != -1)
    {
       vlog("flob header values 0x%04x\n", flobhdr.h & 0xffff);
       blk = fsh_block_read(fd, blk);
 
       // try to read next FLOB
-      vlog("looking for next flob %d\n", flob_cnt);
       flob_cnt++;
-      if (flob_cnt >= fhdr.flobs >> 4)
+      vlog("looking for next flob %d\n", flob_cnt);
+      if (flob_cnt >= fhdr.flobs)
          break;
-      if (lseek(fd, flob_cnt * 0x10000 + sizeof(fhdr), SEEK_SET) == -1)
+      if (lseek(fd, flob_cnt * FLOB_SIZE + sizeof(fhdr), SEEK_SET) == -1)
          perror("fseek"), exit(EXIT_FAILURE);
    }
 

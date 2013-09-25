@@ -32,7 +32,7 @@
 
 #define RL90_STR "RL90 FLASH FILE"
 #define RFLOB_STR "RAYFLOB1"
-
+#define FLOB_SIZE 0x10000
 
 // maximum iterations to prevent from endless loops
 #define MAX_IT 32
@@ -57,8 +57,7 @@
 typedef struct fsh_file_header
 {
    char rl90[16];    //!< constant terminated string "RL90 FLASH FILE"
-   int16_t flobs;    /*!< # of FLOBs * 16, 0x10 or 0x80 (i.e. file size in
-                          multiples of 64k) */
+   int16_t flobs;    //!< # of FLOBs, 0x10 (16) or 0x80 (128)
    int16_t a;        //!< always 0
    int16_t b;        //!< always 0
    int16_t c;        //!< always 1

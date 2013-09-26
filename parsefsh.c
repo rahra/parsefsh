@@ -228,6 +228,33 @@ static int get_id(void)
 }
 
 
+void output_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int64_t guid)
+{
+   char tbuf[TBUFLEN];
+   struct coord cd;
+
+   raycoord_norm(wpd->north, wpd->east, &cd.lat, &cd.lon);
+   cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
+   fsh_timetostr(&wpd->ts, tbuf, sizeof(tbuf));
+
+   fprintf(out, "%s, %.7f, %.7f, %d, ",
+         guid_to_string(guid), cd.lat, cd.lon, wpd->sym);
+         
+   if (wpd->tempr == TEMPR_NA)
+      fprintf(out, "N/A, ");
+   else
+      fprintf(out, "%.1f, ", CELSIUS(wpd->tempr));
+
+   if (wpd->depth == DEPTH_NA)
+      fprintf(out, "N/A, ");
+   else
+      fprintf(out, "%d, ", wpd->depth);
+
+   fprintf(out, "%.*s, %.*s, %s\n", 
+         wpd->name_len, wpd->txt_data, wpd->cmt_len, wpd->txt_data + wpd->name_len, tbuf);
+}
+
+
 void output_osm_nodes(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int id, const char *wpt_type)
 {
    char tbuf[TBUFLEN];
@@ -250,7 +277,7 @@ void output_osm_nodes(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *e
             "      <tag k=\"seamark:sounding\" v=\"%.1f\"/>\n"
             "      <tag k=\"seamark:type\" v=\"sounding\"/>\n",
             (double) wpd->depth / 100.0);
-   if (wpd->tempr != 0xffff)
+   if (wpd->tempr != TEMPR_NA)
       fprintf(out, 
            "      <tag k=\"temperature\" v=\"%.1f\"/>\n",
            CELSIUS(wpd->tempr));
@@ -265,7 +292,7 @@ int track_output_osm_nodes(FILE *out, track_t *trk, int cnt, const ellipsoid_t *
    int i, j, k;
 
    memset(&wpd, 0, sizeof(wpd));
-   wpd.tempr = 0xffff;
+   wpd.tempr = TEMPR_NA;
 
    for (j = 0; j < cnt; j++)
    {
@@ -454,9 +481,7 @@ int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
 
 int route_output(FILE *out, const route21_t *rte, int cnt, const ellipsoid_t *el)
 {
-   struct coord cd;
    fsh_route_wpt_t *wpt;
-   char tbuf[64];
    int i, j;
 
    for (j = 0; j < cnt; j++)
@@ -479,14 +504,7 @@ int route_output(FILE *out, const route21_t *rte, int cnt, const ellipsoid_t *el
 
       for (i = 0, wpt = rte[j].wpt; i < rte[j].hdr3->wpt_cnt; i++)
       {
-         raycoord_norm(wpt->wpt.wpd.north, wpt->wpt.wpd.east, &cd.lat, &cd.lon);
-         cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
- 
-         fsh_timetostr(&wpt->wpt.wpd.ts, tbuf, sizeof(tbuf));
-         fprintf(out, "# %s, %.7f, %.7f, %.7f, %.7f, %d, %.*s, %.*s, %s\n", guid_to_string(wpt->guid),
-               wpt->wpt.lat / 1E7, wpt->wpt.lon / 1E7, cd.lat, cd.lon, wpt->wpt.wpd.sym,
-               wpt->wpt.wpd.name_len, wpt->wpt.wpd.txt_data, wpt->wpt.wpd.cmt_len, wpt->wpt.wpd.txt_data + wpt->wpt.wpd.name_len, tbuf);
-
+         output_wpt(out, &wpt->wpt.wpd, el, wpt->guid);
          wpt = (fsh_route_wpt_t*) ((char*) wpt + wpt->wpt.wpd.name_len + wpt->wpt.wpd.cmt_len + sizeof(*wpt));
       }
    }
@@ -494,10 +512,9 @@ int route_output(FILE *out, const route21_t *rte, int cnt, const ellipsoid_t *el
 }
 
 
-int wpt_01_output(FILE *out, const fsh_block_t *blk)
+int wpt_01_output(FILE *out, const fsh_block_t *blk, const ellipsoid_t *el)
 {
    fsh_wpt01_t *wpt;
-   char tbuf[64];
 
    fprintf(out, "# ----- BEGIN WAYPOINTS TYPE 0x01 -----\n"
                 "# GUID, LAT, LON, SYM, TEMPR [C], DEPTH [cm], NAME, COMMENT, TIMESTAMP\n");
@@ -507,11 +524,7 @@ int wpt_01_output(FILE *out, const fsh_block_t *blk)
          continue;
 
       wpt = blk->data;
-      fsh_timetostr(&wpt->wpd.ts, tbuf, sizeof(tbuf));
-      fprintf(out, "%s, %.7f, %.7f, %d, %.1f, %d, %.*s, %.*s, %s\n", guid_to_string(wpt->guid),
-            0.0, 0.0,
-               wpt->wpd.sym, CELSIUS(wpt->wpd.tempr), wpt->wpd.depth,
-               wpt->wpd.name_len, wpt->wpd.txt_data, wpt->wpd.cmt_len, wpt->wpd.txt_data + wpt->wpd.name_len, tbuf);
+      output_wpt(out, &wpt->wpd, el, wpt->guid);
    }
    fprintf(out, "# ----- END WAYPOINTS TYPE 0x01 -----\n");
    return 0;
@@ -557,7 +570,7 @@ static void output_gpx_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid
             "      <ele>%.1f</ele>\n",
             (double) wpd->depth / -100.0);
 #if 0
-   if (wpt->wpd.tempr != 0xffff)
+   if (wpt->wpd.tempr != TEMPR_NA)
       fprintf(out, 
            "      <tag k=\"temperature\" v=\"%.1f\"/>\n",
            CELSIUS(wpt->wpd.tempr));
@@ -714,7 +727,7 @@ int main(int argc, char **argv)
          break;
 
       case FMT_CSV:
-         wpt_01_output(out, blk);
+         wpt_01_output(out, blk, &el);
          track_output(out, trk, trk_cnt, &el);
          route_output(out, rte, rte_cnt, &el);
          break;

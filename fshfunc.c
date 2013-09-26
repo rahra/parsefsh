@@ -113,7 +113,7 @@ static int fsh_block_count(const fsh_block_t *blk)
    if (blk == NULL)
       return 0;
 
-   for (blk_cnt = 0; blk->hdr.type != 0xffff; blk++, blk_cnt++);
+   for (blk_cnt = 0; blk->hdr.type != FSH_BLK_ILL; blk++, blk_cnt++);
 
    return blk_cnt;
 }
@@ -141,22 +141,30 @@ fsh_block_t *fsh_block_read(int fd, fsh_block_t *blk)
          perror("realloc"), exit(EXIT_FAILURE);
       blk[blk_cnt].data = NULL;
 
+      // check if there's enough space left in the FLOB
+      if (pos + sizeof(fsh_block_header_t) + sizeof(fsh_flob_header_t) > FLOB_SIZE)
+      {
+         blk[blk_cnt].hdr.type = FSH_BLK_ILL;
+         vlog("end, FLOB full\n");
+         break;
+      }
+
       if ((len = read(fd, &blk[blk_cnt].hdr, sizeof(blk[blk_cnt].hdr))) == -1)
          perror("read"), exit(EXIT_FAILURE);
 
-      vlog("offset = $%08lx, block type = 0x%02x, len = %d, guid %s\n",
-            pos + (long) off, blk[blk_cnt].hdr.type, blk[blk_cnt].hdr.len, guid_to_string(blk[blk_cnt].hdr.guid));
+      vlog("offset = $%08lx, pos = $%04x, block type = 0x%02x, len = %d, guid %s\n",
+            pos + (long) off, pos, blk[blk_cnt].hdr.type, blk[blk_cnt].hdr.len, guid_to_string(blk[blk_cnt].hdr.guid));
       pos += len;
 
       if (len < (int) sizeof(blk[blk_cnt].hdr))
       {
          vlog("header truncated, read %d of %d\n", len, (int) sizeof(blk[blk_cnt].hdr));
-         blk[blk_cnt].hdr.type = 0xffff;
+         blk[blk_cnt].hdr.type = FSH_BLK_ILL;
       }
 
-      if (blk[blk_cnt].hdr.type == 0xffff)
+      if (blk[blk_cnt].hdr.type == FSH_BLK_ILL)
       {
-            vlog("end\n");
+            vlog("end, empty block\n");
             break;
       }
 
@@ -187,8 +195,8 @@ static void fsh_tseg_decode0(const fsh_block_t *blk, track_t *trk)
    int i;
 
    vlog("decoding tracks\n");
-   for (; blk->hdr.type != 0xffff; blk++)
-      if (blk->hdr.type == 0x0d)
+   for (; blk->hdr.type != FSH_BLK_ILL; blk++)
+      if (blk->hdr.type == FSH_BLK_TRK)
          for (i = 0; i < trk->mta->guid_cnt; i++)
             if (blk->hdr.guid == trk->mta->guid[i])
             {
@@ -218,10 +226,10 @@ static int fsh_track_decode0(const fsh_block_t *blk, track_t **trk)
    int trk_cnt = 0;
 
    vlog("decoding track metas\n");
-   for (*trk = NULL; blk->hdr.type != 0xffff; blk++)
+   for (*trk = NULL; blk->hdr.type != FSH_BLK_ILL; blk++)
    {
       vlog("decoding 0x%02x\n", blk->hdr.type);
-      if (blk->hdr.type == 0x0e)
+      if (blk->hdr.type == FSH_BLK_MTA)
       {
          vlog("track meta\n");
 
@@ -265,12 +273,12 @@ int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
    int rte_cnt = 0;
 
    vlog("decoding routes\n");
-   for (*rte = NULL; blk->hdr.type != 0xffff; blk++)
+   for (*rte = NULL; blk->hdr.type != FSH_BLK_ILL; blk++)
    {
       vlog("decoding 0x%02x\n", blk->hdr.type);
       switch (blk->hdr.type)
       {
-         case 0x21:
+         case FSH_BLK_RTE:
             vlog("route21\n");
             if ((*rte = realloc(*rte, sizeof(**rte) * (rte_cnt + 1))) == NULL)
                perror("realloc"), exit(EXIT_FAILURE);
@@ -297,7 +305,7 @@ int fsh_route_decode(const fsh_block_t *blk, route21_t **rte)
  */
 void fsh_free_block_data(fsh_block_t *blk)
 {
-   for (; blk->hdr.type != 0xffff; blk++)
+   for (; blk->hdr.type != FSH_BLK_ILL; blk++)
       free(blk->data);
 }
 

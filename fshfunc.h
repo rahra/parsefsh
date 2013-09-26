@@ -50,6 +50,17 @@
 // ellipsoid parameters for WGS84. e is calculated by init_ellipsoid()
 #define WGS84 {6378137, 6356752.3142, 0}
 
+#define TEMPR_NA ((uint16_t) 0xffff)
+#define DEPTH_NA ((int32_t) -1)
+
+// known FSH block types
+#define FSH_BLK_WPT ((uint16_t) 0x0001)
+#define FSH_BLK_TRK ((uint16_t) 0x000d)
+#define FSH_BLK_MTA ((uint16_t) 0x000e)
+#define FSH_BLK_RTE ((uint16_t) 0x0021)
+#define FSH_BLK_GRP ((uint16_t) 0x0022)
+#define FSH_BLK_ILL ((uint16_t) 0xffff)
+
 
 /*** file structures of the ARCHIVE.FSH ***/
 

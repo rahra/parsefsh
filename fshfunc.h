@@ -2,7 +2,7 @@
  *
  * This file is part of Parsefsh.
  *
- * Smrender is free software: you can redistribute it and/or modify
+ * Parsefsh is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, version 3 of the License.
  *
@@ -46,9 +46,6 @@
 //#define FSH_LAT_SCALE 107.1710725
 // Easting is scaled by this
 #define FSH_LON_SCALE ((double) 0x7fffffff)
-
-// ellipsoid parameters for WGS84. e is calculated by init_ellipsoid()
-#define WGS84 {6378137, 6356752.3142, 0}
 
 #define TEMPR_NA ((uint16_t) 0xffff)
 #define DEPTH_NA ((int32_t) -1)
@@ -294,13 +291,6 @@ typedef struct route21
    int first_id, last_id;     //!< IDs, used for OSM output
 } route21_t;
 
-// structure to keep ellipsoid data
-typedef struct ellipsoid
-{
-   double a;   //!< semi-major axis in m (equatorial)
-   double b;   //!< semi-minor axis in m (polar)
-   double e;   //!< eccentricity (this is derived from a and b, call init_ellipsoid())
-} ellipsoid_t;
 
 char *guid_to_string(uint64_t );
 int fsh_read_file_header(int , fsh_file_header_t *);

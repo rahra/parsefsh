@@ -1,15 +1,23 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=gnu99 -DHAVE_VLOG
 LDFLAGS = -lm
-VERSION = 1.0-1504
+VERSION = 1.0-1505
 DISTDIR = parsefsh-$(VERSION)
 DESTDIR = /usr/local/bin
 
-parsefsh: parsefsh.o fshfunc.o
+all: parsefsh parseadm
+
+parsefsh: parsefsh.o fshfunc.o projection.o
 
 parsefsh.o: parsefsh.c fshfunc.h
 
 fshfunc.o: fshfunc.c fshfunc.h
+
+projection.o: projection.c projection.h
+
+parseadm.o: parseadm.c
+
+parseadm: parseadm.o projection.o
 
 dist:
 	rm -rf $(DISTDIR)

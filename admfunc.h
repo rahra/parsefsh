@@ -99,14 +99,22 @@ typedef struct adm_trk_header
    uint32_t len;           //<! 0x002 total length (including this header)
    int32_t a;
    char b;
-   int16_t c;
-   uint32_t len1;          //<! len - 15
-   int32_t d[18];          //<! table of something
-   char name[24];          //<! 0x059 track name
-   uint16_t num_tp;        //<! 0x071 number of trackpoints
+   int32_t c;
+   int16_t d;
+   uint32_t len1;          //<! 0x011 len - 15
+   int32_t e[6];           //<! 0x015 table of somethin
+   int16_t f;              //<! 0x02d
+   uint16_t name_len;      //<! 0x02f length of map name
+   int32_t g[10];          //<! table of something
+   char name[];            //<! 0x059 track name
+} __attribute__((packed)) adm_trk_header_t;
+
+typedef struct adm_trk_header2
+{
+   uint16_t num_tp;        //<! number of trackpoints
    int32_t x;
    int16_t y;
-} __attribute__((packed)) adm_trk_header_t;
+} __attribute__((packed)) adm_trk_header2_t;
 
 
 typedef struct adm_track_point
@@ -119,6 +127,6 @@ typedef struct adm_track_point
    int32_t depth;       /*<! scaled depth, could be 2 int16_t fields as well
                           with the second one being the depth */
    char d;              //<! 0 or 1 at first point
-   int32_t e;           //<! always 0x69045951
+   int32_t tempr;       //<! temperature
 } __attribute__((packed)) adm_track_point_t; 
 

@@ -15,7 +15,7 @@ fshfunc.o: fshfunc.c fshfunc.h
 
 projection.o: projection.c projection.h
 
-parseadm.o: parseadm.c
+parseadm.o: parseadm.c admfunc.h
 
 parseadm: parseadm.o projection.o
 
@@ -26,7 +26,7 @@ dist:
 	tar cvfj $(DISTDIR).tbz2 $(DISTDIR)
 
 install:
-	install parsefsh $(DESTDIR)
+	install parsefsh parseadm $(DESTDIR)
 
 clean:
 	rm -f *.o parsefsh

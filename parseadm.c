@@ -52,7 +52,30 @@ static void hexdump(const void *buf, int len)
 
 void output_node(const adm_track_point_t *tp)
 {
-   hexdump(tp, sizeof(*tp));
+   char ts[TBUFLEN] = "";
+   double tempr, depth;
+   struct tm *tm;
+   time_t t;
+
+   //hexdump(tp, sizeof(*tp)); return;
+
+   t = tp->timestamp + ADM_EPOCH;
+   if ((tm = gmtime(&t)) != NULL)
+      strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", tm);
+
+   if (tp->tempr != ADM_DEPTH_NA)
+      //tempr = (double) tp->tempr / 1E7;
+      tempr = tp->tempr / ADM_LON_SCALE;
+   else
+      tempr = NAN;
+
+   if (tp->depth != ADM_DEPTH_NA)
+      depth = ADM_DEPTH(tp->depth);
+   else
+      depth = NAN;
+
+   printf("%s,%.4f,%.4f,%.1f,%.1f\n",
+         ts, tp->lat / ADM_LAT_SCALE, tp->lon / ADM_LON_SCALE, tp->depth / 100, tempr);
 }
 
 
@@ -74,7 +97,7 @@ void output_osm_node(const adm_track_point_t *tp, const ellipsoid_t *el)
    printf("<node id='%d' timestamp='%s' version='1' lat='%.7f' lon='%.7f'>\n"
           "<tag k='seamark:sounding' v='%.1f'/>\n"
           "<tag k='seamark:type' v='sounding'/>\n</node>\n",
-         --id, ts, tp->lat / ADM_LON_SCALE, tp->lon / ADM_LON_SCALE, ADM_DEPTH(tp->depth) / 100);
+         --id, ts, tp->lat / ADM_LAT_SCALE, tp->lon / ADM_LON_SCALE, ADM_DEPTH(tp->depth) / 100);
 }
 
 
@@ -99,6 +122,7 @@ int main(int argc, char **argv)
    adm_header_t *ah;
    adm_fat_t *af;
    adm_trk_header_t *th;
+   adm_trk_header2_t *th2;
    adm_track_point_t *tp;
    struct tm tm;
    int fd = 0;
@@ -137,18 +161,24 @@ int main(int argc, char **argv)
    for (int i = 0; i < MAX_FAT_BLOCKLIST && af->blocks[i] != 0xffff; i++)
       printf("block[%d] = 0x%04x\n", i, af->blocks[i]);
 
-   init_ellipsoid(&el);
+   //init_ellipsoid(&el);
    th = fbase + af->blocks[0] * blocksize;
-   printf("trackname = %.*s\n", (int) sizeof(th->name), th->name);
-
-   printf("%d\n", (int) sizeof(*th));
-
+   printf("trackname = %.*s\n", th->name_len, th->name);
    printf("-->\n");
 
-   tp = (adm_track_point_t*) (th + 1);
-   for (int i = 0; i < th->num_tp; i++, tp++)
-      //output_osm_node(tp, &el);
+   th2 = (adm_trk_header2_t*) ((void*) (th + 1) + th->name_len);
+   tp = (adm_track_point_t*) (th2 + 1);
+   for (int i = 0; i < th2->num_tp; i++, tp++)
+   {
+//#define OUTPUT_OSM
+#ifdef OUTPUT_OSM
+      output_osm_node(tp, &el);
+#else
+      printf("%3d: ", i);
       output_node(tp);
+#endif
+   }
+
 
    printf("</osm>\n");
 

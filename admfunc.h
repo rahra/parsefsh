@@ -38,26 +38,30 @@
 
 typedef struct adm_header
 {
-   char xor;
-   char null0[9];
+   char xor_byte;
+   char null0[7];
+   uint8_t ver_major;         //<! 0x008 map's major version
+   uint8_t ver_minor;
    uint8_t upd_month;
    uint8_t upd_year;
-   char null1[3];
-   char checksum;
-   char sig[7];
-   char b02_0;
+   int16_t null1;
+   int8_t mapsource;          //<! 0x00e 0: Garmin map, 1 Mapsource map
+   char checksum;             //<! 0x00f
+   char sig[7];               //<! 0x010 "DSKIMG\0"
+   char b02_0;                //<! 0x017 always 2
    uint16_t sec0;
    uint16_t head0;
    uint16_t cyl0;
-   char null2[27];
-   uint16_t creat_year;
+   char null2[18];
+   char data[9];              //<! 0x030 unknown bytes, all 0 in IMG
+   uint16_t creat_year;       //<! 0x039 creation year
    uint8_t creat_month;
    uint8_t creat_day;
    uint8_t creat_hour;
    uint8_t creat_min;
    uint8_t creat_sec;
-   char b02_1;
-   char ident[7];
+   uint8_t fat_phys_block;    //<! 0x040 physical block # of FAT
+   char ident[7];             //<! 0x041 "GARMIN\0"
    char null3;
    char map_desc[20];
    uint16_t head1;
@@ -88,7 +92,7 @@ typedef struct adm_fat
    char sub_name[8];
    char sub_type[3];
    uint32_t sub_size;
-   uint16_t next_fat;
+   uint16_t next_fat;      //<! not sure if this starts 1 byte later
    char y[14];
    uint16_t blocks[];
 } __attribute__((packed)) adm_fat_t;

@@ -91,6 +91,15 @@ int write_subfile(const void *fbase, const adm_fat_t *af, const char *dir, unsig
 }
 
 
+void usage(const char *arg0)
+{
+   printf("Garmin IMG/ADM Splitter, (c) 2013 by Bernhard R. Fischer, <bf@abenteuerland.at>\n"
+          "usage: %s [OPTIONS]\n"
+          "   -d <dir> ..... Directory to extract files to.\n",
+          arg0);
+}
+
+
 int main(int argc, char **argv)
 {
    struct stat st;
@@ -103,11 +112,25 @@ int main(int argc, char **argv)
    void *fbase;
    char *path = ".";
    int fat_cnt;
+   int c;
+
+   while ((c = getopt(argc, argv, "d:h")) != -1)
+      switch (c)
+      {
+         case 'd':
+            path = optarg;
+            break;
+
+         case 'h':
+            usage(argv[0]);
+            return 0;
+     }
+
 
    if (fstat(fd, &st) == -1)
       perror("stat()"), exit(1);
 
-   if ((fbase = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE | MAP_NORESERVE, fd, 0)) == MAP_FAILED)
+   if ((fbase = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0)) == MAP_FAILED)
       perror("mmap()"), exit(1);
 
    ah = fbase;

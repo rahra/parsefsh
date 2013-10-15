@@ -101,14 +101,14 @@ typedef struct adm_fat
 
 typedef struct adm_trk_header
 {
-   uint16_t hl;            //<! 0x000 common header length
-   uint32_t len;           //<! 0x002 total length (including this header)
+   uint16_t hl;            //<! 0x000 common header length, = 0
+   uint32_t len;           //<! 0x002 total length (including this header + trk_header2 + all trackpoints)
    int32_t a;
    char b;
    int32_t c;
    int16_t d;
    uint32_t len1;          //<! 0x011 len - 15
-   int32_t e[6];           //<! 0x015 table of somethin
+   int32_t e[6];           //<! 0x015 table of something
    int16_t f;              //<! 0x02d
    uint16_t name_len;      //<! 0x02f length of map name
    int32_t g[10];          //<! table of something
@@ -122,6 +122,12 @@ typedef struct adm_trk_header2
    int16_t y;
 } __attribute__((packed)) adm_trk_header2_t;
 
+typedef struct adm_trk_trailer
+{
+   uint16_t a;             //!< always 0x0001
+   uint32_t b;             //!< always 0x0000000a
+   uint32_t c;             //1< unknown, checksum?
+} __attribute__((packed)) adm_trk_trailer_t;
 
 typedef struct adm_track_point
 {

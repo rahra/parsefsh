@@ -153,9 +153,6 @@ int main(int argc, char **argv)
          blocksize, (int) sizeof(ah->map_desc), ah->map_desc,
          ah->ver_major, ah->ver_minor, ah->fat_phys_block);
 
-   if (argc > 1)
-      path = argv[1];
-
    af = fbase + ah->fat_phys_block * 0x200 + 0x200;
    for (; af->subfile; )
    {

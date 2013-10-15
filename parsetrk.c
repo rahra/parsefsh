@@ -35,6 +35,23 @@
 enum {FMT_CSV, FMT_OSM, FMT_GPX};
 
 
+// only used for debugging and reverse engineering
+//#define REVENG
+#ifdef REVENG
+/*! This function output len bytes starting at buf in hexadecimal numbers.
+ */
+static void hexdump(const void *buf, int len)
+{
+   static const char hex[] = "0123456789abcdef";
+   int i;
+
+   for (i = 0; i < len; i++)
+      printf("%c%c ", hex[(((char*) buf)[i] >> 4) & 15], hex[((char*) buf)[i] & 15]);
+   printf("\n");
+}
+#endif
+
+
 void output_node(const adm_track_point_t *tp)
 {
    char ts[TBUFLEN] = "";
@@ -85,10 +102,19 @@ void parse_adm(const adm_trk_header_t *th, int format)
    adm_trk_header2_t *th2;
    adm_track_point_t *tp;
 
-   printf("<!-- trackname = %.*s n-->\n", th->name_len, th->name);
+   printf("<!-- trackname = %.*s -->\n", th->name_len, th->name);
 
    th2 = (adm_trk_header2_t*) ((void*) (th + 1) + th->name_len);
    tp = (adm_track_point_t*) (th2 + 1);
+
+#ifdef REVENG
+   printf("e\n");
+   for (int i = 0; i < 6; i++) hexdump(&th->e[i], 4);
+   printf("g\n");
+   for (int i = 0; i < 10; i++) hexdump(&th->g[i], 4);
+   printf("trk_header2 = $%08lx\ntrack_point[0] = $%08lx\n", (void*) th2 - (void*) th, (void*) tp - (void*)th);
+#endif
+
 
    for (int i = 0; i < th2->num_tp; i++, tp++)
    {

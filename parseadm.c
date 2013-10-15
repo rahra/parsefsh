@@ -31,23 +31,8 @@
 #define vlog(x...) fprintf(stderr, ## x)
 #define TBUFLEN 64
 
-#define OUTPUT
 
-// only used for debugging and reverse engineering
-#define REVENG
-#ifdef REVENG
-
-/*! This function output len bytes starting at buf in hexadecimal numbers.
- */
-static void hexdump(const void *buf, int len)
-{
-   static const char hex[] = "0123456789abcdef";
-
-   for (int i = 0; i < len; i++)
-      printf("%c%c ", hex[(((char*) buf)[i] >> 4) & 15], hex[((char*) buf)[i] & 15]);
-   printf("\n");
-}
-#endif
+enum {FMT_CSV, FMT_OSM, FMT_GPX};
 
 
 void output_node(const adm_track_point_t *tp)
@@ -56,8 +41,6 @@ void output_node(const adm_track_point_t *tp)
    double tempr, depth;
    struct tm *tm;
    time_t t;
-
-   //hexdump(tp, sizeof(*tp)); return;
 
    t = tp->timestamp + ADM_EPOCH;
    if ((tm = gmtime(&t)) != NULL)
@@ -82,13 +65,9 @@ void output_node(const adm_track_point_t *tp)
 void output_osm_node(const adm_track_point_t *tp)
 {
    char ts[TBUFLEN] = "";
-   //static double lat = 0;
    static int id = 0;
    struct tm *tm;
    time_t t;
-
-//   if (tp->lat != 0x69045951)
-//         lat = phi_iterate_merc(el, tp->lat / ADM_LAT_SCALE) * 180 / M_PI;
 
    t = tp->timestamp + ADM_EPOCH;
    if ((tm = gmtime(&t)) != NULL)
@@ -101,38 +80,39 @@ void output_osm_node(const adm_track_point_t *tp)
 }
 
 
-void *read_file(const void *base, const uint16_t *blocks, int num, int blocksize)
+void parse_adm(const adm_trk_header_t *th, int format)
 {
-   void *file;
+   adm_trk_header2_t *th2;
+   adm_track_point_t *tp;
 
-   if ((file = malloc(num * blocksize)) == NULL)
-      return NULL;
+   printf("<!-- trackname = %.*s n-->\n", th->name_len, th->name);
 
-   for (int i = 0; i < num; i++)
-      memcpy(file + i * blocksize, base + blocks[i] * blocksize, blocksize);
+   th2 = (adm_trk_header2_t*) ((void*) (th + 1) + th->name_len);
+   tp = (adm_track_point_t*) (th2 + 1);
 
-   return file;
+   for (int i = 0; i < th2->num_tp; i++, tp++)
+   {
+      switch (format)
+      {
+         case FMT_OSM:
+            output_osm_node(tp);
+            break;
+
+         case FMT_CSV:
+         default:
+            printf("%3d: ", i);
+            output_node(tp);
+      }
+   }
 }
 
 
 int main(int argc, char **argv)
 {
-   int print_blocks = 0;
-
    struct stat st;
-   char ts[64];
-   adm_header_t *ah;
-   adm_fat_t *af;
-   adm_trk_header_t *th;
-   adm_trk_header2_t *th2;
-   adm_track_point_t *tp;
-   struct tm tm;
    int fd = 0;
-   int blocksize;
    void *fbase;
-   char *path = ".", *fname;
-   FILE *fout = NULL;
-   uint32_t wsize;
+   int format = FMT_OSM;
 
    if (fstat(fd, &st) == -1)
       perror("stat()"), exit(1);
@@ -140,97 +120,15 @@ int main(int argc, char **argv)
    if ((fbase = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE | MAP_NORESERVE, fd, 0)) == MAP_FAILED)
       perror("mmap()"), exit(1);
 
-   ah = fbase;
-   memset(&tm, 0, sizeof(tm));
-   tm.tm_year = ah->creat_year - 1900;
-   tm.tm_mon = ah->creat_month;
-   tm.tm_mday = ah->creat_day;
-   tm.tm_hour = ah->creat_hour;
-   tm.tm_min = ah->creat_min;
-   tm.tm_sec = ah->creat_sec;
-   strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", &tm);
+   
+   if (format == FMT_OSM)
+      printf("<?xml version='1.0' encoding='UTF-8'?>\n<osm version='0.6' generator='parseadm'>\n");
 
-   blocksize = 1 << (ah->blocksize_e1 + ah->blocksize_e2);
+   parse_adm(fbase, format);
 
-   printf("<?xml version='1.0' encoding='UTF-8'?>\n<osm version='0.6' generator='parseadm'>\n");
+   if (format == FMT_OSM)
+      printf("</osm>\n");
 
-   printf("<!--\n");
-   printf("signature = %s\nidentifier = %s\ncreation date = %s\n"
-         "updated = %d/%d\nblock size = %d\nmap desc = %.*s\n"
-         "version = %d.%d\nfat physical block = %d\n",
-         ah->sig, ah->ident, ts, ah->upd_month + 1,
-         ah->upd_year + (ah->upd_year >= 0x63 ? 1900 : 2000),
-         blocksize, (int) sizeof(ah->map_desc), ah->map_desc,
-         ah->ver_major, ah->ver_minor, ah->fat_phys_block);
-
-   if (argc > 1)
-      path = argv[1];
-
-   if ((fname = malloc(strlen(path) + 14)) == NULL)
-      perror("malloc()"), exit(1);
- 
-   af = fbase + ah->fat_phys_block * 0x200 + 0x200;
-   for (; af->subfile; af = (void*) af + 0x200)
-   {
-      if (!af->next_fat)
-      {
-         printf("subfile = %d, subname = %.*s, subtype = %.*s, size = %d, nextfat = %d\n",
-               af->subfile, (int) sizeof(af->sub_name), af->sub_name,
-               (int) sizeof(af->sub_type), af->sub_type, af->sub_size, af->next_fat);
-
-         snprintf(fname, strlen(path) + 14, "%s/%.*s.%.*s",
-               path, (int) sizeof(af->sub_name), af->sub_name, (int) sizeof(af->sub_type), af->sub_type);
-
-#ifdef OUTPUT
-         if (fout != NULL)
-            fclose(fout);
-         if ((fout = fopen(fname, "w")) == NULL)
-            perror("fopen()"), exit(1);
-#endif
-         wsize = af->sub_size;
-      }
-      else if (print_blocks)
-         printf("cont'd\n");
-
-      for (int i = 0; i < MAX_FAT_BLOCKLIST && af->blocks[i] != 0xffff; i++)
-      {
-         if (print_blocks)
-            printf("block[%d] = 0x%04x\n", i, af->blocks[i]);
-
-#ifdef OUTPUT
-         if (fwrite(fbase + blocksize * af->blocks[i], wsize > (unsigned) blocksize ? (unsigned) blocksize : wsize, 1, fout) < 1)
-            fprintf(stderr, "fwrite() truncated\n");
-         wsize -= blocksize;
-#endif
-      }
-
-      if (strncmp(af->sub_type, "TRK", 3))
-         continue;
-
-      th = fbase + af->blocks[0] * blocksize;
-      printf("trackname = %.*s\n", th->name_len, th->name);
-      printf("-->\n");
-
-      th2 = (adm_trk_header2_t*) ((void*) (th + 1) + th->name_len);
-      tp = (adm_track_point_t*) (th2 + 1);
-      for (int i = 0; i < th2->num_tp; i++, tp++)
-      {
-//#define OUTPUT_OSM
-#ifdef OUTPUT_OSM
-         output_osm_node(tp, &el);
-#else
-         printf("%3d: ", i);
-         output_node(tp);
-#endif
-      }
-   }
-
-#ifdef OUTPUT
-   if (fout != NULL)
-      fclose(fout);
-#endif
-
-   printf("</osm>\n");
 
    if (munmap(fbase, st.st_size) == -1)
       perror("munmap()"), exit(1);

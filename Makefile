@@ -4,8 +4,8 @@ LDFLAGS = -lm
 VERSION = 1.0-1514
 DISTDIR = parsefsh-$(VERSION)
 DESTDIR = /usr/local/bin
-DISTFILES = LICENSE Makefile admfunc.h fshfunc.c fshfunc.h parseadm.c parsefsh.c projection.c splitimg.c projection.h
-TARGETS = parsefsh parseadm splitimg
+DISTFILES = LICENSE Makefile admfunc.h fshfunc.c fshfunc.h parsetrk.c parsefsh.c projection.c splitimg.c projection.h
+TARGETS = parsefsh parsetrk splitimg
 
 all: $(TARGETS)
 
@@ -17,9 +17,9 @@ fshfunc.o: fshfunc.c fshfunc.h
 
 projection.o: projection.c projection.h
 
-parseadm.o: parseadm.c admfunc.h
+parsetrk.o: parsetrk.c admfunc.h
 
-parseadm: parseadm.o projection.o
+parsetrk: parsetrk.o projection.o
 
 splitimg.o: splitimg.c admfunc.h
 

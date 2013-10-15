@@ -107,17 +107,48 @@ void parse_adm(const adm_trk_header_t *th, int format)
 }
 
 
+void usage(const char *arg0)
+{
+   printf("Garmin TRK Parser, (c) 2013 by Bernhard R. Fischer, <bf@abenteuerland.at>\n"
+          "usage: %s [OPTIONS]\n"
+          "   -f <format> ..... <format> := 'csv' | 'osm' | 'gpx'\n",
+          arg0);
+
+}
+
+
 int main(int argc, char **argv)
 {
    struct stat st;
    int fd = 0;
    void *fbase;
    int format = FMT_OSM;
+   int c;
+
+   while ((c = getopt(argc, argv, "f:h")) != -1)
+      switch (c)
+      {
+         case 'f':
+            if (!strcasecmp(optarg, "csv"))
+               format = FMT_CSV;
+            else if (!strcasecmp(optarg, "osm"))
+               format = FMT_OSM;
+            else if (!strcasecmp(optarg, "gpx"))
+               vlog("GPX not implemented yet!\n"), exit(1);
+            else
+               vlog("unknown format '%s', defaults to OSM\n", optarg);
+            break;
+
+         case 'h':
+            usage(argv[0]);
+            return 0;
+     }
+
 
    if (fstat(fd, &st) == -1)
       perror("stat()"), exit(1);
 
-   if ((fbase = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE | MAP_NORESERVE, fd, 0)) == MAP_FAILED)
+   if ((fbase = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0)) == MAP_FAILED)
       perror("mmap()"), exit(1);
 
    

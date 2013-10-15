@@ -1,11 +1,13 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=gnu99 -DHAVE_VLOG
 LDFLAGS = -lm
-VERSION = 1.0-1505
+VERSION = 1.0-1514
 DISTDIR = parsefsh-$(VERSION)
 DESTDIR = /usr/local/bin
+DISTFILES = LICENSE Makefile admfunc.h fshfunc.c fshfunc.h parseadm.c parsefsh.c projection.c splitimg.c projection.h
+TARGETS = parsefsh parseadm splitimg
 
-all: parsefsh parseadm splitimg
+all: $(TARGETS)
 
 parsefsh: parsefsh.o fshfunc.o projection.o
 
@@ -26,14 +28,14 @@ splitimg: splitimg.o
 dist:
 	rm -rf $(DISTDIR)
 	mkdir $(DISTDIR)
-	cp parsefsh.c fshfunc.c fshfunc.h Makefile LICENSE $(DISTDIR)
+	cp $(DISTFILES) $(DISTDIR)
 	tar cvfj $(DISTDIR).tbz2 $(DISTDIR)
 
 install:
-	install parsefsh parseadm $(DESTDIR)
+	install $(TARGETS) $(DESTDIR)
 
 clean:
-	rm -f *.o parsefsh
+	rm -f *.o $(TARGETS)
 
 .PHONY: clean dist install
 

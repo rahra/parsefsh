@@ -5,7 +5,7 @@ VERSION = 1.0-1505
 DISTDIR = parsefsh-$(VERSION)
 DESTDIR = /usr/local/bin
 
-all: parsefsh parseadm
+all: parsefsh parseadm splitimg
 
 parsefsh: parsefsh.o fshfunc.o projection.o
 
@@ -18,6 +18,10 @@ projection.o: projection.c projection.h
 parseadm.o: parseadm.c admfunc.h
 
 parseadm: parseadm.o projection.o
+
+splitimg.o: splitimg.c admfunc.h
+
+splitimg: splitimg.o
 
 dist:
 	rm -rf $(DISTDIR)

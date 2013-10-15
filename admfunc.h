@@ -88,11 +88,13 @@ typedef struct adm_partition
 
 typedef struct adm_fat
 {
-   char subfile;
+   char subfile;           //<! 1 in real subfiles
    char sub_name[8];
    char sub_type[3];
    uint32_t sub_size;
-   uint16_t next_fat;      //<! not sure if this starts 1 byte later
+   uint16_t next_fat;      /*<! not sure if this starts 1 byte later,
+                             this is 0 in the first block and increments by 256
+                             in each following block. */
    char y[14];
    uint16_t blocks[];
 } __attribute__((packed)) adm_fat_t;

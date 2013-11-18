@@ -126,7 +126,7 @@ typedef struct adm_trk_trailer
 {
    uint16_t a;             //!< always 0x0001
    uint32_t b;             //!< always 0x0000000a
-   uint32_t c;             //1< unknown, checksum?
+   uint32_t c;             //!< unknown, checksum?
 } __attribute__((packed)) adm_trk_trailer_t;
 
 typedef struct adm_track_point

@@ -17,10 +17,11 @@ GPX, or CSV format.  It is written in portable manner and should compile and
 run on most systems as long as the are based on a Little Endian CPU (such as
 Intel). It is written on Linux but tested also on FreeBSD and Windows.
 
-Parsefsh reads FSH data from standard input and outputs the waypoints, tracks
-and routes in OSM, GPX, or CSV format to stdout. Use the command line option
-`-f gpx` or `-f csv` to changes the output format to GPX or CSV. OSM is the
-default format. The following command shows how to run it.
+Parsefsh reads FSH data from standard input (stdin) and outputs the waypoints,
+tracks and routes in OSM, GPX, or CSV format to standard output (stdout). Use
+the command line option `-f gpx` or `-f csv` to changes the output format to
+GPX or CSV. OSM is the default format. The following command shows how to run
+it.
 
 ```Shell
 parsefsh < ARCHIVE.FSH > archive.osm

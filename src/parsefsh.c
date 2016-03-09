@@ -1,4 +1,4 @@
-/* Copyright 2013 Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>
+/* Copyright 2013-2016 Bernhard R. Fischer, 4096R/8E24F29D <bf@abenteuerland.at>
  *
  * This file is part of Parsefsh.
  *
@@ -43,6 +43,8 @@
 #define CELSIUS(x) ((double) (x) / 100.0 - 273.15)
 
 #define TBUFLEN 24
+
+#define COPYLEFT "ARCHIVE.FSH decoder (c) 2013-2016 by Bernhard R. Fischer, 4096R/8E24F29D <bf@abenteuerland.at>, License GPLv3"
 
 
 enum {FMT_CSV, FMT_OSM, FMT_GPX};
@@ -462,22 +464,24 @@ int wpt_01_output_osm_nodes(FILE *out, const fsh_block_t *blk, const ellipsoid_t
 }
 
 
-static void output_gpx_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el)
+static void output_gpx_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int type)
 {
    struct coord cd;
-   char tbuf[64];
+   char tbuf[64], *t;
 
+   t = type == FSH_BLK_WPT ? "wpt" : "rtept";
    raycoord_norm(wpd->north, wpd->east, &cd.lat, &cd.lon);
    cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
 
    fsh_timetostr(&wpd->ts, tbuf, sizeof(tbuf));
 
    fprintf(out,
-            "   <wpt lat=\"%.7f\" lon=\"%.7f\">\n"
+            "   <%s lat=\"%.7f\" lon=\"%.7f\">\n"
             "      <time>%s</time>\n"
             "      <name>%.*s</name>\n"
             "      <cmt>%.*s</cmt>\n",
             //get_id() + 1, wpt->lat / 1E7, wpt->lon / 1E7, ts, wpt->name_len, wpt->name);
+            t,
             cd.lat, cd.lon, tbuf, wpd->name_len, wpd->txt_data, wpd->cmt_len, wpd->txt_data + wpd->name_len);
 
    if (wpd->depth != -1)
@@ -490,7 +494,7 @@ static void output_gpx_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid
            "      <tag k=\"temperature\" v=\"%.1f\"/>\n",
            CELSIUS(wpt->wpd.tempr));
 #endif
-   fprintf(out, "   </wpt>\n");
+   fprintf(out, "   </%s>\n", t);
 }
 
 
@@ -508,7 +512,7 @@ int route_output_gpx_ways(FILE *out, route21_t *rte, int cnt, const ellipsoid_t 
 
       for (wpt = rte[j].wpt, i = 0; i < rte[j].hdr3->wpt_cnt; i++)
       {
-         output_gpx_wpt(out, &wpt->wpt.wpd, el);
+         output_gpx_wpt(out, &wpt->wpt.wpd, el, FSH_BLK_RTE);
          wpt = (fsh_route_wpt_t*) ((char*) wpt + wpt->wpt.wpd.name_len + wpt->wpt.wpd.cmt_len + sizeof(*wpt));
       }
 
@@ -530,7 +534,7 @@ int wpt_01_output_gpx_nodes(FILE *out, const fsh_block_t *blk, const ellipsoid_t
          continue;
 
       wpt = blk->data;
-      output_gpx_wpt(out, &wpt->wpd, el);
+      output_gpx_wpt(out, &wpt->wpd, el, FSH_BLK_WPT);
    }
    return 0;
 }
@@ -549,12 +553,13 @@ static void check_endian(void)
 static void usage(const char *s)
 {
    printf(
+         "%s\n"
          "usage: %s [OPTIONS]\n"
          "   -c ............. Output CSV format instead of OSM.\n"
          "   -f <format> .... Define output format. Available formats: csv, gpx, osm.\n"
          "   -h ............. This help.\n"
          "   -q ............. Quiet. No informational output.\n",
-         s);
+         COPYLEFT, s);
 }
 
 
@@ -601,7 +606,7 @@ int main(int argc, char **argv)
             break;
      }
 
-   vlog("ARCHIVE.FSH decoder (c) 2013 by Bernhard R. Fischer, 2048R/5C5FFD47 <bf@abenteuerland.at>\n");
+   vlog("%s\n", COPYLEFT);
 
    check_endian();
    init_ellipsoid(&el);

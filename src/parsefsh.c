@@ -507,8 +507,10 @@ int route_output_gpx_ways(FILE *out, route21_t *rte, int cnt, const ellipsoid_t 
    {
       fprintf(out,
             "   <rte>\n"
-            "      <name>%.*s</name>\n",
-            rte[j].hdr->name_len, NAME(*rte[j].hdr));
+            "      <name>%.*s</name>\n"
+            "      <cmt>%.*s</cmt>\n",
+            rte[j].hdr->name_len, NAME(*rte[j].hdr),
+            rte[j].hdr->cmt_len, COMMENT(*rte[j].hdr));
 
       for (wpt = rte[j].wpt, i = 0; i < rte[j].hdr3->wpt_cnt; i++)
       {

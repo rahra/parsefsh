@@ -299,7 +299,7 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 {
    struct coord cd, cd0;
    struct pcoord pc = {0, 0};
-   double dist;
+   double dist, dist_seg;
    int i, j, k, n;
 
    for (j = 0; j < cnt; j++)
@@ -307,11 +307,11 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
       fprintf(out, "# ----- BEGIN TRACK -----\n");
       if (trk[j].mta != NULL)
       {
-         fprintf(out, "# name = '%.*s', tempr_start = %.1f, depth_start = %d, tempr_end = %.1f, depth_end = %d, guid_cnt = %d\n",
+         fprintf(out, "# name = '%.*s', tempr_start = %.1f, depth_start = %d, tempr_end = %.1f, depth_end = %d, length = %d m, guid_cnt = %d\n",
                (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "",
                CELSIUS(trk[j].mta->tempr_start), trk[j].mta->depth_start,
                CELSIUS(trk[j].mta->tempr_end), trk[j].mta->depth_end,
-               trk[j].mta->guid_cnt);
+               trk[j].mta->length, trk[j].mta->guid_cnt);
          for (i = 0; i < trk[j].mta->guid_cnt; i++)
             fprintf(out, "# guid[%d] = %s\n", i, guid_to_string(trk[j].mta->guid[i]));
       }
@@ -320,8 +320,10 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
 
       fprintf(out, "# CNT, NR, FSH-N, FSH-E, lat, lon, DEPTH [cm], TEMPR [C], C, bearing, distance [m], TRACKNAME\n");
 
-      for (k = 0, n = 0; k < trk[j].mta->guid_cnt; k++)
-         for (i = 0, dist = 0; i < trk[j].tseg[k].hdr->cnt; i++, n++)
+      for (k = 0, n = 0, dist = 0; k < trk[j].mta->guid_cnt; k++, dist += dist_seg)
+      {
+         fprintf(out, "# ----- BEGIN TRACKSEG -----\n");
+         for (i = 0, dist_seg = 0; i < trk[j].tseg[k].hdr->cnt; i++, n++)
          {
             if (trk[j].tseg[k].pt[i].c == -1)
                continue;
@@ -342,8 +344,11 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
                   (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
             else
                fprintf(out, "\n");
-            dist += pc.dist;
+            dist_seg += pc.dist;
          }
+         fprintf(out, "# distance = %.1f nm, %.1f m\n", dist_seg * 60, DEG2M(dist_seg));
+         fprintf(out, "# ----- END TRACKSEG -----\n");
+      }
       fprintf(out, "# total distance = %.1f nm, %.1f m\n", dist * 60, DEG2M(dist));
       fprintf(out, "# ----- END TRACK -----\n");
    }

@@ -113,8 +113,7 @@ typedef struct fsh_track_meta
    int16_t cnt;      //!< number of track points
    int16_t _cnt;     //!< same as cnt
    int16_t b;        //!< unknown, always 0
-   int16_t c;        //!< unknown
-   int16_t d;        //!< unknown, always 0 (1 in 2nd block)
+   int32_t length;   //!< approx. track length in m
    int32_t north_start; //!< Northing of first track point
    int32_t east_start;  //!< Easting of first track point
    uint16_t tempr_start;//!< temperature of first track point
@@ -123,7 +122,8 @@ typedef struct fsh_track_meta
    int32_t east_end;    //!< Easting of last track point
    uint16_t tempr_end;  //!< temperature last track point
    int32_t depth_end;   //!< depth of last track point
-   char i;           //!< unknown, 0, 1, or 5;
+   char col;         /*!< track color: 0 - red, 1 - yellow, 2 - green, 3 -
+                       blue, 4 - magenta, 5 - black */
    char name[16];    //!< name of track, string not terminated
    char j;           //!< unknown, always 0
    uint8_t guid_cnt; //!< nr of guids following this header

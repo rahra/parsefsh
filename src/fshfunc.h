@@ -143,10 +143,14 @@ typedef struct fsh_block_header
 typedef struct fsh_route21_header
 {
    int16_t a;        //!< unknown, always 0
-   int16_t name_len; //!< length of name of route
+   char name_len;    //!< length of name of route
+   char cmt_len;     //!< length of comment
    int16_t guid_cnt; //!< number of guids following this header
    uint16_t b;       //!< unknown
-   char name[];      //!< unterminated name string of length name_len
+   char txt_data[];  /*!< this is a combined string field of 'name' and
+                       'comment' exactly like it is in the fsh_wpt_data_t (see
+                       there). Use the macros NAME() and COMMENT() to retrieve
+                       pointers to the strings. */
 } __attribute__ ((packed)) fsh_route21_header_t;
 
 // route type 0x22 (not seen yet in a file, I took this from fsh2gpx.py)

@@ -387,7 +387,7 @@ int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
             "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n"
             "      <tag k=\"name\" v=\"%.*s\"/>\n"
             "      <tag k=\"fsh:type\" v=\"route\"/>\n",
-            get_id(), ts, rte[j].hdr->name_len, rte[j].hdr->name);
+            get_id(), ts, rte[j].hdr->name_len, NAME(*rte[j].hdr));
       for (i = rte[j].first_id; i >= rte[j].last_id; i--)
          fprintf(out, "      <nd ref=\"%d\"/>\n", i);
       fprintf(out, "   </way>\n");
@@ -403,7 +403,7 @@ int route_output(FILE *out, const route21_t *rte, int cnt, const ellipsoid_t *el
 
    for (j = 0; j < cnt; j++)
    {
-      fprintf(out, "# route '%.*s', guid_cnt = %d\n", rte[j].hdr->name_len, rte[j].hdr->name, rte[j].hdr->guid_cnt);
+      fprintf(out, "# route '%.*s', guid_cnt = %d\n", rte[j].hdr->name_len, NAME(*rte[j].hdr), rte[j].hdr->guid_cnt);
       for (i = 0; i < rte[j].hdr->guid_cnt; i++)
          fprintf(out, "#   %s\n", guid_to_string(rte[j].guid[i]));
 
@@ -508,7 +508,7 @@ int route_output_gpx_ways(FILE *out, route21_t *rte, int cnt, const ellipsoid_t 
       fprintf(out,
             "   <rte>\n"
             "      <name>%.*s</name>\n",
-            rte[j].hdr->name_len, rte[j].hdr->name);
+            rte[j].hdr->name_len, NAME(*rte[j].hdr));
 
       for (wpt = rte[j].wpt, i = 0; i < rte[j].hdr3->wpt_cnt; i++)
       {

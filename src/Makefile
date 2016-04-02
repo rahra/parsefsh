@@ -1,10 +1,10 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=gnu99 -DHAVE_VLOG
 LDFLAGS = -lm
-VERSION = 1.0-1517
+VERSION = 1.0-g231
 DISTDIR = parsefsh-$(VERSION)
 DESTDIR = /usr/local/bin
-DISTFILES = LICENSE Makefile admfunc.h fshfunc.c fshfunc.h parsetrk.c parsefsh.c projection.c splitimg.c projection.h
+DISTFILES = ../README.md ../LICENSE Makefile admfunc.h fshfunc.c fshfunc.h parsetrk.c parsefsh.c projection.c splitimg.c projection.h
 TARGETS = parsefsh parsetrk splitimg
 
 all: $(TARGETS)
@@ -37,5 +37,8 @@ install:
 clean:
 	rm -f *.o $(TARGETS)
 
-.PHONY: clean dist install
+version:
+	git log --oneline | wc -l
+
+.PHONY: clean dist install version
 

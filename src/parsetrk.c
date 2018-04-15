@@ -97,26 +97,66 @@ void output_osm_node(const adm_track_point_t *tp)
 }
 
 
+static long decode_int(void *ptr, int size)
+{
+   long val = 0;
+   for (int i = size - 1; i >= 0; i--)
+   {
+      val <<= 8;
+      val |= *((unsigned char*) ptr + i);
+   }
+   return val;
+}
+
+
 void parse_adm(const adm_trk_header_t *th, int format)
 {
-   adm_trk_header2_t *th2;
+   adm_descriptor_t *desc;
    adm_track_point_t *tp;
+   unsigned i, hlen, numtp, namelen, dstart;
+   char *name;
 
-   printf("<!-- trackname = %.*s -->\n", th->name_len, th->name);
+   printf("<!--\nheader descriptor table: %d, at offset 0x%0x\n"
+         "data descriptor table: %d, at offset 0x%0x\n"
+         "header: 0x%0x\n",
+         th->hdr_tbl_entries, th->start_hdr_tbl,
+         th->data_desc_tbl_entries, th->start_data_desc_tbl,
+         th->start_hdr);
 
-   th2 = (adm_trk_header2_t*) ((void*) (th + 1) + th->name_len);
-   tp = (adm_track_point_t*) (th2 + 1);
+   hlen = 0;
+   desc = (adm_descriptor_t*) ((char*) th + th->start_hdr_tbl);
+   for (i = 0; i < th->hdr_tbl_entries; i++, desc++)
+   {
+      printf("type = 0x%0x, size = %d\n", desc->type, desc->size);
+      switch (desc->type)
+      {
+         case DESC_TYPE_NAME:
+            name = (char*) th + th->start_hdr + hlen;
+            namelen = desc->size;
+            break;
 
-#ifdef REVENG
-   printf("e\n");
-   for (int i = 0; i < 6; i++) hexdump(&th->e[i], 4);
-   printf("g\n");
-   for (int i = 0; i < 10; i++) hexdump(&th->g[i], 4);
-   printf("trk_header2 = $%08lx\ntrack_point[0] = $%08lx\n", (void*) th2 - (void*) th, (void*) tp - (void*)th);
-#endif
+         case DESC_TYPE_NUMTP:
+            numtp = decode_int((char*) th + th->start_hdr + hlen, desc->size);
+            break;
 
+         case DESC_TYPE_DATA_START:
+            dstart = decode_int((char*) th + th->start_hdr + hlen, desc->size);
+            tp = (adm_track_point_t*) ((char*) th + dstart);
+            break;
+      }
+      hlen += desc->size;
+   }
+   desc = (adm_descriptor_t*) ((char*) th + th->start_data_desc_tbl);
+   for (i = 0; i < th->data_desc_tbl_entries; i++, desc++)
+   {
+      printf("type = 0x%0x, size = %d\n", desc->type, desc->size);
+   }
 
-   for (int i = 0; i < th2->num_tp; i++, tp++)
+   printf("trackpoints: %d\nname: %.*s\n", numtp, namelen, name);
+   printf("total header length: %ld\n-->\n",
+         sizeof(*th) + hlen + sizeof(*desc) * (th->hdr_tbl_entries + th->data_desc_tbl_entries));
+
+   for (unsigned i = 0; i < numtp; i++, tp++)
    {
       switch (format)
       {
@@ -135,7 +175,7 @@ void parse_adm(const adm_trk_header_t *th, int format)
 
 void usage(const char *arg0)
 {
-   printf("Garmin TRK Parser, (c) 2013 by Bernhard R. Fischer, <bf@abenteuerland.at>\n"
+   printf("Garmin TRK Parser, (c) 2013-2016 by Bernhard R. Fischer, <bf@abenteuerland.at>\n"
           "usage: %s [OPTIONS]\n"
           "   -f <format> ..... <format> := 'csv' | 'osm' | 'gpx'\n",
           arg0);

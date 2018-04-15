@@ -99,6 +99,30 @@ typedef struct adm_fat
    uint16_t blocks[];
 } __attribute__((packed)) adm_fat_t;
 
+//! name field
+#define DESC_TYPE_NAME 0x2c
+//! number of data elements (trackpoints)
+#define DESC_TYPE_NUMTP 0x2d
+//! start address of first data element
+#define DESC_TYPE_DATA_START 0x30
+//! latitude
+#define DESC_TYPE_LAT 0xf4
+//! longitude
+#define DESC_TYPE_LON 0xf5
+//! timestamp
+#define DESC_TYPE_TSTAMP 0xf6
+//! depth
+#define DESC_TYPE_DEPTH 0xf7
+//! temperature
+#define DESC_TYPE_TEMP 0xf9
+
+typedef struct adm_descriptor
+{
+   uint8_t type;              //<! descriptor type
+   char a;                 //<! unknown, always 1
+   uint16_t size;          //<! number of bytes of described element
+} __attribute__((packed)) adm_descriptor_t;
+
 typedef struct adm_trk_header
 {
    uint16_t hl;            //<! 0x000 common header length, = 0
@@ -108,19 +132,13 @@ typedef struct adm_trk_header
    int32_t c;
    int16_t d;
    uint32_t len1;          //<! 0x011 len - 15
-   int32_t e[6];           //<! 0x015 table of something
-   int16_t f;              //<! 0x02d
-   uint16_t name_len;      //<! 0x02f length of map name
-   int32_t g[10];          //<! table of something
-   char name[];            //<! 0x059 track name
+   uint32_t start_hdr_tbl;          //!< pointer to header descriptor table
+   uint32_t hdr_tbl_entries;        //!< number of entries in header descriptor table
+   uint32_t start_data_desc_tbl;    //!< pointer to data descriptor table
+   uint32_t data_desc_tbl_entries;  //!< number of entries in data descriptor table
+   uint32_t start_hdr;              //!< pointer to first header
+   uint32_t e;                      //!< how many blocks of data? usually 1?
 } __attribute__((packed)) adm_trk_header_t;
-
-typedef struct adm_trk_header2
-{
-   uint16_t num_tp;        //<! number of trackpoints
-   int32_t x;
-   int16_t y;
-} __attribute__((packed)) adm_trk_header2_t;
 
 typedef struct adm_trk_trailer
 {

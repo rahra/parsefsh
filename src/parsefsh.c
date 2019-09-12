@@ -145,6 +145,39 @@ static int get_id(void)
 }
 
 
+/*! This is a universal XML character escape function. It escapes all
+ * characters of src string with length slen which are listed in esc. The
+ * result string is written to dst of at most dstlen bytes including the
+ * terminating \0.
+ */
+static void esc_txt(const char *src, int slen, char *dst, int dstlen, const char *esc)
+{
+   int wlen;
+
+   // safety check
+   if (src == NULL || dst == NULL)
+      return;
+
+   for (dstlen--; slen && dstlen; slen--, src++)
+   {
+      if (strchr(esc, *src) != NULL)
+      {
+         wlen = snprintf(dst, dstlen + 1, "&#%d;", *src);
+         if (wlen >= dstlen + 1)
+            return;
+         dstlen -= wlen;
+         dst += wlen;
+         continue;
+      }
+
+      *dst++ = *src;
+      dstlen--;
+   }
+
+   *dst = '\0';
+}
+
+
 void output_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int64_t guid)
 {
    char tbuf[TBUFLEN];
@@ -174,20 +207,22 @@ void output_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int
 
 void output_osm_nodes(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int id, const char *wpt_type)
 {
-   char tbuf[TBUFLEN];
+   char tbuf[TBUFLEN], name[64], cmt[64];
    struct coord cd;
 
    raycoord_norm(wpd->north, wpd->east, &cd.lat, &cd.lon);
    cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
 
    fsh_timetostr(&wpd->ts, tbuf, sizeof(tbuf));
+   esc_txt(NAME(*wpd), wpd->name_len, name, sizeof(name), "&<>\"");
+   esc_txt(COMMENT(*wpd), wpd->cmt_len, cmt, sizeof(cmt), "&<>\"");
 
    fprintf(out,
             "   <node id=\"%d\" lat=\"%.7f\" lon=\"%.7f\" timestamp=\"%s\">\n"
             "      <tag k=\"fsh:type\" v=\"%s\"/>\n"
-            "      <tag k=\"name\" v=\"%.*s\"/>\n"
-            "      <tag k=\"description\" v=\"%.*s\"/>\n",
-            id, cd.lat, cd.lon, tbuf, wpt_type, wpd->name_len, wpd->txt_data, wpd->cmt_len, wpd->txt_data + wpd->name_len);
+            "      <tag k=\"name\" v=\"%s\"/>\n"
+            "      <tag k=\"description\" v=\"%s\"/>\n",
+            id, cd.lat, cd.lon, tbuf, wpt_type, name, cmt);
 
    if (wpd->depth != -1)
       fprintf(out, 
@@ -378,6 +413,7 @@ int route_output_osm_nodes(FILE *out, route21_t *rte, int cnt, const ellipsoid_t
 int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
 {
    char ts[TBUFLEN] = "0000-00-00T00:00:00Z";
+   char name[64];
    struct tm *tm;
    time_t t;
    int i, j;
@@ -388,11 +424,12 @@ int route_output_osm_ways(FILE *out, route21_t *rte, int cnt)
 
    for (j = 0; j < cnt; j++)
    {
+      esc_txt(NAME(*rte[j].hdr), rte[j].hdr->name_len, name, sizeof(name), "&<>\"");
       fprintf(out,
             "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n"
-            "      <tag k=\"name\" v=\"%.*s\"/>\n"
+            "      <tag k=\"name\" v=\"%s\"/>\n"
             "      <tag k=\"fsh:type\" v=\"route\"/>\n",
-            get_id(), ts, rte[j].hdr->name_len, NAME(*rte[j].hdr));
+            get_id(), ts, name);
       for (i = rte[j].first_id; i >= rte[j].last_id; i--)
          fprintf(out, "      <nd ref=\"%d\"/>\n", i);
       fprintf(out, "   </way>\n");
@@ -472,22 +509,24 @@ int wpt_01_output_osm_nodes(FILE *out, const fsh_block_t *blk, const ellipsoid_t
 static void output_gpx_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid_t *el, int type)
 {
    struct coord cd;
-   char tbuf[64], *t;
+   char tbuf[64], *t, name[64], cmt[64];
 
    t = type == FSH_BLK_WPT ? "wpt" : "rtept";
    raycoord_norm(wpd->north, wpd->east, &cd.lat, &cd.lon);
    cd.lat = phi_iterate_merc(el, cd.lat) * 180 / M_PI;
 
    fsh_timetostr(&wpd->ts, tbuf, sizeof(tbuf));
+   esc_txt(NAME(*wpd), wpd->name_len, name, sizeof(name), "&<>");
+   esc_txt(COMMENT(*wpd), wpd->cmt_len, cmt, sizeof(cmt), "&<>");
 
    fprintf(out,
             "   <%s lat=\"%.7f\" lon=\"%.7f\">\n"
             "      <time>%s</time>\n"
-            "      <name>%.*s</name>\n"
-            "      <cmt>%.*s</cmt>\n",
+            "      <name>%s</name>\n"
+            "      <cmt>%s</cmt>\n",
             //get_id() + 1, wpt->lat / 1E7, wpt->lon / 1E7, ts, wpt->name_len, wpt->name);
             t,
-            cd.lat, cd.lon, tbuf, wpd->name_len, wpd->txt_data, wpd->cmt_len, wpd->txt_data + wpd->name_len);
+            cd.lat, cd.lon, tbuf, name, cmt);
 
    if (wpd->depth != -1)
       fprintf(out, 
@@ -505,17 +544,19 @@ static void output_gpx_wpt(FILE *out, const fsh_wpt_data_t *wpd, const ellipsoid
 
 int route_output_gpx_ways(FILE *out, route21_t *rte, int cnt, const ellipsoid_t *el)
 {
+   char name[64], cmt[64];
    fsh_route_wpt_t *wpt;
    int i;
 
    for (int j = 0; j < cnt; j++)
    {
+      esc_txt(NAME(*rte[j].hdr), rte[j].hdr->name_len, name, sizeof(name), "&<>");
+      esc_txt(COMMENT(*rte[j].hdr), rte[j].hdr->cmt_len, cmt, sizeof(cmt), "&<>");
       fprintf(out,
             "   <rte>\n"
-            "      <name>%.*s</name>\n"
-            "      <cmt>%.*s</cmt>\n",
-            rte[j].hdr->name_len, NAME(*rte[j].hdr),
-            rte[j].hdr->cmt_len, COMMENT(*rte[j].hdr));
+            "      <name>%s</name>\n"
+            "      <cmt>%s</cmt>\n",
+            name, cmt);
 
       for (wpt = rte[j].wpt, i = 0; i < rte[j].hdr3->wpt_cnt; i++)
       {

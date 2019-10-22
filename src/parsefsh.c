@@ -1,4 +1,4 @@
-/* Copyright 2013-2016 Bernhard R. Fischer, 4096R/8E24F29D <bf@abenteuerland.at>
+/* Copyright 2013-2019 Bernhard R. Fischer, 4096R/8E24F29D <bf@abenteuerland.at>
  *
  * This file is part of Parsefsh.
  *
@@ -44,7 +44,7 @@
 
 #define TBUFLEN 24
 
-#define COPYLEFT "ARCHIVE.FSH decoder (c) 2013-2016 by Bernhard R. Fischer, 4096R/8E24F29D <bf@abenteuerland.at>, License GPLv3"
+#define COPYLEFT "ARCHIVE.FSH decoder (c) 2013-2019 by Bernhard R. Fischer, 4096R/8E24F29D <bf@abenteuerland.at>, License GPLv3"
 
 
 enum {FMT_CSV, FMT_OSM, FMT_GPX};
@@ -281,7 +281,7 @@ int track_output_osm_ways(FILE *out, track_t *trk, int cnt)
    for (j = 0; j < cnt; j++)
    {
       fprintf(out, "   <way id=\"%d\" version =\"1\" timestamp=\"%s\">\n", get_id(), ts);
-      if (trk[j].mta != NULL && trk[j].mta->name != NULL)
+      if (trk[j].mta != NULL)
          fprintf(out, "      <tag k=\"name\" v=\"%s\"/>\n", trk[j].mta->name);
       fprintf(out, "      <tag k=\"fsh:type\" v=\"track\"/>\n");
       for (i = trk[j].first_id; i >= trk[j].last_id; i--)
@@ -305,7 +305,7 @@ int track_output_gpx(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *
       if (trk[j].mta != NULL)
       {
          fprintf(out, "  <name>%.*s</name>\n  <trkseg>\n",
-               (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
+               (int) sizeof(trk[j].mta->name), trk[j].mta->name);
       }
 
       for (k = 0, n = 0; k < trk[j].mta->guid_cnt; k++)
@@ -343,7 +343,7 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
       if (trk[j].mta != NULL)
       {
          fprintf(out, "# name = '%.*s', tempr_start = %.1f, depth_start = %d, tempr_end = %.1f, depth_end = %d, length = %d m, guid_cnt = %d\n",
-               (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "",
+               (int) sizeof(trk[j].mta->name), trk[j].mta->name,
                CELSIUS(trk[j].mta->tempr_start), trk[j].mta->depth_start,
                CELSIUS(trk[j].mta->tempr_end), trk[j].mta->depth_end,
                trk[j].mta->length, trk[j].mta->guid_cnt);
@@ -376,7 +376,7 @@ int track_output(FILE *out, const track_t *trk, int cnt, const ellipsoid_t *el)
                   trk[j].tseg[k].pt[i].c, pc.bearing, DEG2M(pc.dist));
             if (trk[j].mta)
                fprintf(out, ", %.*s\n",
-                  (int) sizeof(trk[j].mta->name), trk[j].mta->name != NULL ? trk[j].mta->name : "");
+                  (int) sizeof(trk[j].mta->name), trk[j].mta->name);
             else
                fprintf(out, "\n");
             dist_seg += pc.dist;

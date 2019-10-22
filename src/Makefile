@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g -std=gnu99 -DHAVE_VLOG
-LDFLAGS = -lm
-VERSION = 1.0-g238
+LDLIBS = -lm
+VERSION = 1.1
 DISTDIR = parsefsh-$(VERSION)
 DESTDIR = /usr/local/bin
 DISTFILES = ../README.md ../LICENSE Makefile admfunc.h fshfunc.c fshfunc.h parsetrk.c parsefsh.c projection.c splitimg.c projection.h
